@@ -59,7 +59,7 @@ let build_induction_scheme_in_type dep sort ind =
   let sigma, pind = Evd.fresh_inductive_instance env sigma ind in
   let sigma, c = build_induction_scheme env sigma pind dep sort in
     c, Evd.evar_universe_context sigma
- 
+
 let rect_scheme_kind_from_type =
   declare_individual_scheme_object "_rect_nodep"
     (fun _ x -> build_induction_scheme_in_type false InType x, Safe_typing.empty_private_constants)
@@ -108,6 +108,19 @@ let sind_scheme_kind_from_prop =
   declare_individual_scheme_object "_sind" ~aux:"_sind_from_prop"
   (fun _ x -> build_induction_scheme_in_type false InSProp x, Safe_typing.empty_private_constants)
 
+let use_type_for_prop () =
+  (* This function should not get called before the command line arguments are parsed.
+   * The assertion prevents calling it before the setup of the environment has started. *)
+  assert (not (Global.env_is_initial ()));
+  Environ.indices_matter (Global.env())
+
+let ind_or_rect_scheme_kind_from_prop () =
+  if use_type_for_prop () then rect_scheme_kind_from_prop
+  else ind_scheme_kind_from_prop
+
+let ind_or_rect_scheme_kind_from_type () =
+  if use_type_for_prop () then rect_scheme_kind_from_type
+  else ind_scheme_kind_from_type
 
 (* Case analysis *)
 

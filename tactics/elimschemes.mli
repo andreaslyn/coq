@@ -33,6 +33,8 @@ val sind_dep_scheme_kind_from_type : individual scheme_kind
 val rec_scheme_kind_from_type : individual scheme_kind
 val rec_dep_scheme_kind_from_type : individual scheme_kind
 
+val ind_or_rect_scheme_kind_from_prop : unit -> individual scheme_kind
+val ind_or_rect_scheme_kind_from_type : unit -> individual scheme_kind
 
 (** Case analysis schemes *)
 

@@ -334,6 +334,21 @@ let jmeq_same_dom env sigma = function
       | _, [dom1; _; dom2;_] -> is_conv env sigma dom1 dom2
       | _ -> false
 
+let eq_elimination_ref l2r sort =
+  let name =
+    if l2r then
+      match sort with
+      | InProp -> "core.eq.ind_r"
+      | InSProp -> "core.eq.sind_r"
+      | InSet | InType -> "core.eq.rect_r"
+    else
+      match sort with
+      | InProp -> "core.eq.ind"
+      | InSProp -> "core.eq.sind"
+      | InSet | InType -> "core.eq.rect"
+  in
+  if Coqlib.has_ref name then Some (Coqlib.lib_ref name) else None
+
 (* find_elim determines which elimination principle is necessary to
    eliminate lbeq on sort_of_gl. *)
 
@@ -352,35 +367,41 @@ let find_elim hdcncl lft2rgt dep cls ot =
       (is_global_exists "core.JMeq.type" hdcncl
        && jmeq_same_dom env sigma ot)) && not dep
   then
-    let c = 
+    let sort = elimination_sort_of_clause cls gl in
+    let c =
       match EConstr.kind sigma hdcncl with 
-      | Ind (ind_sp,u) -> 
-	let pr1 = 
-          lookup_eliminator env ind_sp (elimination_sort_of_clause cls gl)
-	in
+      | Ind (ind_sp,u) ->
         begin match lft2rgt, cls with
         | Some true, None
         | Some false, Some _ ->
-	  let c1 = destConstRef pr1 in 
-          let mp,l = Constant.repr2 (Constant.make1 (Constant.canonical c1)) in
-	  let l' = Label.of_id (add_suffix (Label.to_id l) "_r")  in 
-          let c1' = Global.constant_of_delta_kn (KerName.make mp l') in
-	  begin 
-	    try 
-	      let _ = Global.lookup_constant c1' in
-		c1'
-	    with Not_found -> 
+          (* FIXME. Missing JMeq elimination case! *)
+          begin match eq_elimination_ref true sort with
+          | Some r -> destConstRef r
+          | None ->
+            let c1 = destConstRef (lookup_eliminator env ind_sp sort) in
+            let mp,l = Constant.repr2 (Constant.make1 (Constant.canonical c1)) in
+            let l' = Label.of_id (add_suffix (Label.to_id l) "_r")  in
+            let c1' = Global.constant_of_delta_kn (KerName.make mp l') in
+            begin try
+              let _ = Global.lookup_constant c1' in c1'
+            with Not_found ->
 	      user_err ~hdr:"Equality.find_elim"
                 (str "Cannot find rewrite principle " ++ Label.print l' ++ str ".")
+            end
 	  end
-	| _ -> destConstRef pr1
+        | _ ->
+          (* FIXME. Missing JMeq elimination case! *)
+          begin match eq_elimination_ref false sort with
+          | Some r -> destConstRef r
+          | None -> destConstRef (lookup_eliminator env ind_sp sort)
+          end
         end
       | _ -> 
 	  (* cannot occur since we checked that we are in presence of 
 	     Logic.eq or Jmeq just before *)
 	assert false
     in
-        pf_constr_of_global (ConstRef c) 
+      pf_constr_of_global (ConstRef c)
   else
   let scheme_name = match dep, lft2rgt, inccl with
     (* Non dependent case *)
@@ -946,12 +967,12 @@ let build_coq_I () = pf_constr_of_global (lib_ref "core.True.I")
 let rec build_discriminator env sigma true_0 false_0 dirn c = function
   | [] ->
       let ind = get_type_of env sigma c in
-      build_selector env sigma dirn c ind true_0 false_0
+      build_selector env sigma dirn c ind true_0 (fst false_0)
   | ((sp,cnum),argnum)::l ->
       let (cnum_nlams,cnum_env,kont) = descend_then env sigma c cnum in
       let newc = mkRel(cnum_nlams-argnum) in
       let subval = build_discriminator cnum_env sigma true_0 false_0 dirn newc l in
-      kont sigma subval (false_0,mkProp)
+      kont sigma subval false_0
 
 (* Note: discrimination could be more clever: if some elimination is
    not allowed because of a large impredicative constructor in the
@@ -988,8 +1009,8 @@ let ind_scheme_of_eq lbeq =
   let kind = inductive_sort_family mip in
   (* use ind rather than case by compatibility *)
   let kind =
-    if kind == InProp then Elimschemes.ind_scheme_kind_from_prop
-    else Elimschemes.ind_scheme_kind_from_type in
+    if kind == InProp then Elimschemes.ind_or_rect_scheme_kind_from_prop ()
+    else Elimschemes.ind_or_rect_scheme_kind_from_type () in
   let c, eff = find_scheme kind (destIndRef lbeq.eq) in
     ConstRef c, eff
 
@@ -1018,12 +1039,13 @@ let apply_on_clause (f,t) clause =
 let discr_positions env sigma (lbeq,eqn,(t,t1,t2)) eq_clause cpath dirn =
   build_coq_True () >>= fun true_0 ->
   build_coq_False () >>= fun false_0 ->
+  let false_ty = Retyping.get_type_of env sigma false_0 in
   let e = next_ident_away eq_baseid (vars_of_env env) in
   let e_env = push_named (Context.Named.Declaration.LocalAssum (make_annot e Sorts.Relevant,t)) env in
   let discriminator =
     try
       Proofview.tclUNIT
-        (build_discriminator e_env sigma true_0 false_0 dirn (mkVar e) cpath)
+        (build_discriminator e_env sigma true_0 (false_0,false_ty) dirn (mkVar e) cpath)
     with
       UserError _ as ex -> Proofview.tclZERO ex
   in

@@ -391,7 +391,8 @@ let ssrelim ?(is_case=false) deps what ?elim eqid elim_intro_tac =
           let erefl = fire_subst gl erefl in
           apply_type new_concl [erefl], gl in
         let rel = k + if c_is_head_p then 1 else 0 in
-        let src, gl = mkProt EConstr.mkProp EConstr.(mkApp (eq,[|t; c; mkRel rel|])) gl in
+        let temporaryTYPE = if Environ.indices_matter (Global.env()) then EConstr.mkSet else EConstr.mkProp in
+        let src, gl = mkProt temporaryTYPE EConstr.(mkApp (eq,[|t; c; mkRel rel|])) gl in
         let concl = EConstr.mkArrow src Sorts.Relevant (EConstr.Vars.lift 1 concl) in
         let clr = if deps <> [] then clr else [] in
         concl, gen_eq_tac, clr, gl
