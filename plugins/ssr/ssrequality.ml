@@ -129,9 +129,8 @@ let newssrcongrtac arg ist gl =
   let arr, gl = pf_mkSsrConst "ssr_congr_arrow" gl in
   let ssr_congr lr = EConstr.mkApp (arr, lr) in
   (* here the two cases: simple equality or arrow *)
-  let equality, _, eq_args, gl' =
-    let eq, gl = pf_fresh_global Coqlib.(lib_ref "core.eq.type") gl in
-    pf_saturate gl (EConstr.of_constr eq) 3 in
+  let eq, gl = pf_fresh_global Coqlib.(lib_ref "core.eq.type") gl in
+  let equality, _, eq_args, gl' = pf_saturate gl (EConstr.of_constr eq) 3 in
   tclMATCH_GOAL (equality, gl') (fun gl' -> fs gl' (List.assoc 0 eq_args))
   (fun ty -> congrtac (arg, Detyping.detype Detyping.Now false Id.Set.empty (pf_env gl) (project gl) ty) ist)
   (fun () ->
@@ -495,7 +494,8 @@ let rwprocess_rule dir rule gl =
           | _ ->
             let sigma, pi2 = Evd.fresh_global env sigma coq_prod.Coqlib.proj2 in
             EConstr.mkApp (pi2, ra), sigma in
-        if EConstr.eq_constr sigma a.(0) (EConstr.of_constr (UnivGen.constr_of_monomorphic_global @@ Coqlib.(lib_ref "core.True.type"))) then
+        let sigma,trty = Evd.fresh_global env sigma Coqlib.(lib_ref "core.True.type") in
+        if EConstr.eq_constr sigma a.(0) trty then
          let s, sigma = sr sigma 2 in
          loop (converse_dir d) sigma s a.(1) rs 0
         else
