@@ -624,6 +624,8 @@ let rwargtac ?under ?map_redex ist ((dir, mult), (((oclr, occ), grx), (kind, gt)
   let rwtac gl = 
     let rx = Option.map (interp_rpattern gl) grx in
     let t = interp gt gl in
+    let sigma = Evd.merge_universe_context (project gl) (Evd.evar_universe_context (fst t)) in
+    let gl = re_sig (sig_it gl) sigma in
     (match kind with
     | RWred sim -> simplintac occ rx sim
     | RWdef -> if dir = R2L then foldtac occ rx t else unfoldintac occ rx t gt
