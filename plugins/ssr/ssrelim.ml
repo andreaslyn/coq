@@ -383,16 +383,18 @@ let ssrelim ?(is_case=false) deps what ?elim eqid elim_intro_tac =
         let c = fire_subst gl (List.assoc (n_elim_args - k - 1) elim_args) in
         let gl, t = pfe_type_of gl c in
         let gl, eq = get_eq_type gl in
-        let gen_eq_tac, gl =
+        let gen_eq_tac, eq_ty, gl =
           let refl = EConstr.mkApp (eq, [|t; c; c|]) in
           let new_concl = EConstr.mkArrow refl Sorts.Relevant (EConstr.Vars.lift 1 (pf_concl orig_gl)) in
           let new_concl = fire_subst gl new_concl in
           let erefl, gl = mkRefl t c gl in
           let erefl = fire_subst gl erefl in
-          apply_type new_concl [erefl], gl in
+          let erefl_ty = Retyping.get_type_of (pf_env gl) (project gl) erefl in
+          let eq_ty = Retyping.get_type_of (pf_env gl) (project gl) erefl_ty in
+                      (* FIXME. Is typecheck:false right? *)
+          apply_type ~typecheck:false new_concl [erefl], eq_ty, gl in
         let rel = k + if c_is_head_p then 1 else 0 in
-        let temporaryTYPE = if Environ.indices_matter (Global.env()) then EConstr.mkSet else EConstr.mkProp in
-        let src, gl = mkProt temporaryTYPE EConstr.(mkApp (eq,[|t; c; mkRel rel|])) gl in
+        let src, gl = mkProt eq_ty EConstr.(mkApp (eq,[|t; c; mkRel rel|])) gl in
         let concl = EConstr.mkArrow src Sorts.Relevant (EConstr.Vars.lift 1 concl) in
         let clr = if deps <> [] then clr else [] in
         concl, gen_eq_tac, clr, gl
