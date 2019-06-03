@@ -411,7 +411,7 @@ val clr_of_wgen :
 
 val unfold : EConstr.t list -> unit Proofview.tactic
 
-val apply_type : ?typecheck:bool -> EConstr.types -> EConstr.t list -> Proofview.V82.tac
+val apply_type : EConstr.types -> EConstr.t list -> Proofview.V82.tac
 
 (* New code ****************************************************************)
 

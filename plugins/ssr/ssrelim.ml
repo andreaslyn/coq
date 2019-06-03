@@ -391,8 +391,12 @@ let ssrelim ?(is_case=false) deps what ?elim eqid elim_intro_tac =
           let erefl = fire_subst gl erefl in
           let erefl_ty = Retyping.get_type_of (pf_env gl) (project gl) erefl in
           let eq_ty = Retyping.get_type_of (pf_env gl) (project gl) erefl_ty in
-                      (* FIXME. Is typecheck:false right? *)
-          apply_type ~typecheck:false new_concl [erefl], eq_ty, gl in
+          let gen_eq_tac s =
+            let open Evd in
+            let sigma = merge_universe_context s.sigma (evar_universe_context (project gl)) in
+            apply_type new_concl [erefl] { s with sigma }
+          in
+          gen_eq_tac, eq_ty, gl in
         let rel = k + if c_is_head_p then 1 else 0 in
         let src, gl = mkProt eq_ty EConstr.(mkApp (eq,[|t; c; mkRel rel|])) gl in
         let concl = EConstr.mkArrow src Sorts.Relevant (EConstr.Vars.lift 1 concl) in

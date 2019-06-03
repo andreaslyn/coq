@@ -1143,8 +1143,7 @@ let pf_interp_gen_aux gl to_ind ((oclr, occ), t) =
     false, pat, EConstr.mkProd (make_annot (constr_name (project gl) c) rp, pty, Tacmach.pf_concl gl), p, clr,ucst,gl
   else CErrors.user_err ?loc:(loc_of_cpattern t) (str "generalized term didn't match")
 
-let apply_type ?typecheck:(typecheck=true) x xs =
-  Proofview.V82.of_tactic (Tactics.apply_type ~typecheck x xs)
+let apply_type x xs = Proofview.V82.of_tactic (Tactics.apply_type ~typecheck:true x xs)
 
 let genclrtac cl cs clr =
   let tclmyORELSE tac1 tac2 gl =
