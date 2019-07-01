@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -125,7 +125,7 @@ let typecheck_params_and_fields finite def poly pl ps records =
        let env = EConstr.push_rel_context newps env0 in
        let poly =
          match t with
-         | { CAst.v = CSort (Glob_term.GType []) } -> true | _ -> false in
+         | { CAst.v = CSort (Glob_term.UAnonymous {rigid=true}) } -> true | _ -> false in
        let sigma, s = interp_type_evars ~program_mode:false env sigma ~impls:empty_internalization_env t in
        let sred = Reductionops.whd_allnolet env sigma s in
          (match EConstr.kind sigma sred with
@@ -342,17 +342,18 @@ let declare_projections indsp ctx ?(kind=StructureComponent) binder_name flags f
 		let projtyp =
                   it_mkProd_or_LetIn (mkProd (x,rp,ccl)) paramdecls in
 	        try
+                  let open Proof_global in
 		  let entry = {
-		    const_entry_body =
-		      Future.from_val (Safe_typing.mk_pure_proof proj);
-		    const_entry_secctx = None;
-		    const_entry_type = Some projtyp;
-                    const_entry_universes = ctx;
-		    const_entry_opaque = false;
-		    const_entry_inline_code = false;
-		    const_entry_feedback = None } in
-		  let k = (DefinitionEntry entry,IsDefinition kind) in
-		  let kn = declare_constant ~internal:InternalTacticRequest fid k in
+                    proof_entry_body =
+                      Future.from_val ((proj, Univ.ContextSet.empty), Evd.empty_side_effects);
+                    proof_entry_secctx = None;
+                    proof_entry_type = Some projtyp;
+                    proof_entry_universes = ctx;
+                    proof_entry_opaque = false;
+                    proof_entry_inline_code = false;
+                    proof_entry_feedback = None } in
+                  let k = (Declare.DefinitionEntry entry,IsDefinition kind) in
+                  let kn = declare_constant fid k in
 		  let constr_fip =
 		    let proj_args = (*Rel 1 refers to "x"*) paramargs@[mkRel 1] in
 		      applist (mkConstU (kn,u),proj_args) 
@@ -366,7 +367,7 @@ let declare_projections indsp ctx ?(kind=StructureComponent) binder_name flags f
 	    Impargs.maybe_declare_manual_implicits false refi impls;
             if flags.pf_subclass then begin
 	      let cl = Class.class_of_global (IndRef indsp) in
-	        Class.try_add_new_coercion_with_source refi ~local:false poly ~source:cl
+                Class.try_add_new_coercion_with_source refi ~local:false ~poly ~source:cl
 	    end;
 	    let i = if is_local_assum decl then i+1 else i in
 	      (Some kn::sp_projs, i, Projection term::subst)
@@ -469,28 +470,22 @@ let declare_structure ~cum finite ubinders univs paramimpls params template ?(ki
     let cstr = (rsp, 1) in
     let kinds,sp_projs = declare_projections rsp ctx ~kind binder_name.(i) coers fieldimpls fields in
     let build = ConstructRef cstr in
-    let () = if is_coe then Class.try_add_new_coercion build ~local:false poly in
+    let () = if is_coe then Class.try_add_new_coercion build ~local:false ~poly in
     let () = declare_structure_entry (cstr, List.rev kinds, List.rev sp_projs) in
     rsp
   in
   List.mapi map record_data
 
 let implicits_of_context ctx =
-  List.map_i (fun i name ->
-    let explname =
-      match name with
-      | Name n -> Some n
-      | Anonymous -> None
-    in ExplByPos (i, explname), (true, true, true))
-    1 (List.rev (Anonymous :: (List.map RelDecl.get_name ctx)))
+  List.map (fun name -> CAst.make (Some (name,true)))
+    (List.rev (Anonymous :: (List.map RelDecl.get_name ctx)))
 
 let declare_class def cum ubinders univs id idbuild paramimpls params arity
     template fieldimpls fields ?(kind=StructureComponent) coers priorities =
   let fieldimpls =
     (* Make the class implicit in the projections, and the params if applicable. *)
-    let len = List.length params in
     let impls = implicits_of_context params in
-      List.map (fun x -> impls @ Impargs.lift_implicits (succ len) x) fieldimpls
+      List.map (fun x -> impls @ x) fieldimpls
   in
   let binder_name = Namegen.next_ident_away id (Termops.vars_of_env (Global.env())) in
   let data =
@@ -588,12 +583,14 @@ let declare_class def cum ubinders univs id idbuild paramimpls params arity
 let add_constant_class env sigma cst =
   let ty, univs = Typeops.type_of_global_in_context env (ConstRef cst) in
   let r = (Environ.lookup_constant cst env).const_relevance in
-  let ctx, arity = decompose_prod_assum ty in
+  let ctx, _ = decompose_prod_assum ty in
+  let args = Context.Rel.to_extended_vect Constr.mkRel 0 ctx in
+  let t = mkApp (mkConstU (cst, Univ.make_abstract_instance univs), args) in
   let tc = 
     { cl_univs = univs;
       cl_impl = ConstRef cst;
       cl_context = (List.map (const None) ctx, ctx);
-      cl_props = [LocalAssum (make_annot Anonymous r, arity)];
+      cl_props = [LocalAssum (make_annot Anonymous r, t)];
       cl_projs = [];
       cl_strict = !typeclasses_strict;
       cl_unique = !typeclasses_unique
@@ -683,7 +680,7 @@ let extract_record_data records =
 (* [fs] corresponds to fields and [ps] to parameters; [coers] is a
    list telling if the corresponding fields must me declared as coercions
    or subinstances. *)
-let definition_structure udecl kind ~template cum poly finite records =
+let definition_structure udecl kind ~template cum ~poly finite records =
   let () = check_unique_names records in
   let () = check_priorities kind records in
   let ps, data = extract_record_data records in
@@ -702,7 +699,7 @@ let definition_structure udecl kind ~template cum poly finite records =
     declare_class def cum ubinders univs id.CAst.v idbuild
       implpars params arity template implfs fields coers priorities
   | _ ->
-    let map impls = implpars @ Impargs.lift_implicits (succ (List.length params)) impls in
+    let map impls = implpars @ [CAst.make None] @ impls in
     let data = List.map (fun (arity, implfs, fields) -> (arity, List.map map implfs, fields)) data in
     let map (arity, implfs, fields) (is_coe, id, _, cfs, idbuild, _) =
       let coe = List.map (fun (_, { rf_subclass ; rf_canonical }) ->

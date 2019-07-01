@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -100,7 +100,7 @@ val restrict_universe_context : ContextSet.t -> LSet.t -> ContextSet.t
    universes are preserved. *)
 val restrict : t -> Univ.LSet.t -> t
 
-val demote_seff_univs : Safe_typing.private_constants Entries.definition_entry -> t -> t
+val demote_seff_univs : Entries.universes_entry -> t -> t
 
 type rigid = 
   | UnivRigid

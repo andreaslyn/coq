@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -91,7 +91,8 @@ let type_of_logical_kind = function
       (match a with
       | Definitional -> "defax"
       | Logical -> "prfax"
-      | Conjectural -> "prfax")
+      | Conjectural -> "prfax"
+      | Context -> "prfax")
   | IsProof th ->
       (match th with
       | Theorem

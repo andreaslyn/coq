@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -14,14 +14,24 @@
    into elementary ones, insertion of coercions and resolution of
    implicit arguments. *)
 
+open Names
 open Environ
 open Evd
 open EConstr
 open Glob_term
 open Ltac_pretype
 
+val add_bidirectionality_hint : GlobRef.t -> int -> unit
+(** A bidirectionality hint `n` for a global `g` tells the pretyper to use
+    typing information from the context after typing the `n` for arguments of an
+    application of `g`. *)
+
+val get_bidirectionality_hint : GlobRef.t -> int option
+
+val clear_bidirectionality_hint : GlobRef.t -> unit
+
 val interp_known_glob_level : ?loc:Loc.t -> Evd.evar_map ->
-  glob_level -> Univ.Level.t
+  glob_sort_name -> Univ.Level.t
 
 (** An auxiliary function for searching for fixpoint guard indexes *)
 

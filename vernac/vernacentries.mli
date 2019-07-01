@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -20,10 +20,17 @@ val vernac_require :
   Libnames.qualid option -> bool option -> Libnames.qualid list -> unit
 
 (** The main interpretation function of vernacular expressions *)
-val interp :
-  ?verbosely:bool ->
-  ?proof:Proof_global.closed_proof ->
-  st:Vernacstate.t -> Vernacexpr.vernac_control -> Vernacstate.t
+val interp : ?verbosely:bool -> st:Vernacstate.t -> Vernacexpr.vernac_control -> Vernacstate.t
+
+(** Execute a Qed but with a proof_object which may contain a delayed
+   proof and won't be forced *)
+val interp_qed_delayed_proof
+  :  proof:Proof_global.proof_object
+  -> info:Lemmas.Info.t
+  -> st:Vernacstate.t
+  -> ?loc:Loc.t
+  -> Vernacexpr.proof_end
+  -> Vernacstate.t
 
 (** Prepare a "match" template for a given inductive type.
     For each branch of the match, we list the constructor name
@@ -40,9 +47,6 @@ val command_focus : unit Proof.focus_kind
 
 val interp_redexp_hook : (Environ.env -> Evd.evar_map -> Genredexpr.raw_red_expr ->
   Evd.evar_map * Redexpr.red_expr) Hook.t
-
-(** Helper *)
-val vernac_require_open_proof : pstate:Proof_global.t option -> (pstate:Proof_global.t -> 'a) -> 'a
 
 (* Flag set when the test-suite is called. Its only effect to display
    verbose information for `Fail` *)

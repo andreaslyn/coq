@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -830,6 +830,22 @@ let pr_goal_by_id ~proof id =
       let g = Evd.evar_key id sigma in
       pr_selected_subgoal (pr_id id) sigma g)
   with Not_found -> user_err Pp.(str "No such goal.")
+
+(** print a goal identified by the goal id as it appears in -emacs mode.
+    sid should be the Stm state id corresponding to proof.  Used to support
+    the Prooftree tool in Proof General. (https://askra.de/software/prooftree/).
+*)
+let pr_goal_emacs ~proof gid sid =
+  match proof with
+  | None -> user_err Pp.(str "No proof for that state.")
+  | Some proof ->
+    let pr gs =
+      v 0 ((str "goal ID " ++ (int gid) ++ str " at state " ++ (int sid)) ++ cut ()
+          ++ pr_goal gs)
+    in
+    try
+      Proof.in_proof proof (fun sigma -> pr {it=(Evar.unsafe_of_int gid);sigma=sigma;})
+    with Not_found -> user_err Pp.(str "No such goal.")
 
 (* Printer function for sets of Assumptions.assumptions.
    It is used primarily by the Print Assumptions command. *)

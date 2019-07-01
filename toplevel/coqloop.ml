@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -402,6 +402,11 @@ let rec vernac_loop ~state =
       let nstate = Vernac.process_expr ~state (make ?loc c) in
       top_goal_print ~doc:state.doc c state.proof nstate.proof;
       vernac_loop ~state:nstate
+
+    | Some (VernacShowGoal {gid; sid}) ->
+      let proof = Stm.get_proof ~doc:state.doc (Stateid.of_int sid) in
+      Feedback.msg_notice (Printer.pr_goal_emacs ~proof gid sid);
+      vernac_loop ~state
 
     | None ->
       top_stderr (fnl ()); exit 0

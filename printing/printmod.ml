@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -297,7 +297,7 @@ let print_body is_impl extent env mp (l,body) =
 		hov 2 (str ":= " ++
                        Printer.pr_lconstr_env env sigma (Mod_subst.force_constr l))
 	      | _ -> mt ()) ++ str "." ++
-            Printer.pr_abstract_universe_ctx sigma ctx ?priv:cb.const_private_poly_univs)
+            Printer.pr_abstract_universe_ctx sigma ctx)
     | SFBmind mib ->
       match extent with
       | WithContents ->

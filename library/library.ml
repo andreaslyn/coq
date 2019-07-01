@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -276,11 +276,11 @@ let in_import_library : DirPath.t list * bool -> obj =
 (** Delayed / available tables of opaque terms *)
 
 type 'a table_status =
-  | ToFetch of 'a option array delayed
-  | Fetched of 'a option array
+  | ToFetch of 'a array delayed
+  | Fetched of 'a array
 
 let opaque_tables =
-  ref (LibraryMap.empty : (Constr.constr table_status) LibraryMap.t)
+  ref (LibraryMap.empty : (Opaqueproof.opaque_proofterm table_status) LibraryMap.t)
 
 let add_opaque_table dp st =
   opaque_tables := LibraryMap.add dp st !opaque_tables
@@ -310,6 +310,7 @@ let access_opaque_table dp i =
 
 let indirect_accessor = {
   Opaqueproof.access_proof = access_opaque_table;
+  Opaqueproof.access_discharge = Cooking.cook_constr;
 }
 
 (************************************************************************)
@@ -319,8 +320,7 @@ type seg_sum = summary_disk
 type seg_lib = library_disk
 type seg_univ = (* true = vivo, false = vi *)
   Univ.ContextSet.t * bool
-type seg_discharge = Opaqueproof.cooking_info list array
-type seg_proofs = Constr.constr option array
+type seg_proofs = Opaqueproof.opaque_proofterm array
 
 let mk_library sd md digests univs =
   {
@@ -343,7 +343,6 @@ let intern_from_file f =
   let (lsd : seg_sum), _, digest_lsd = System.marshal_in_segment f ch in
   let ((lmd : seg_lib delayed), digest_lmd) = in_delayed f ch in
   let (univs : seg_univ option), _, digest_u = System.marshal_in_segment f ch in
-  let _ = System.skip_in_segment f ch in
   let _ = System.skip_in_segment f ch in
   let ((del_opaque : seg_proofs delayed),_) = in_delayed f ch in
   close_in ch;
@@ -527,15 +526,13 @@ let load_library_todo f =
   let (s0 : seg_sum), _, _ = System.marshal_in_segment f ch in
   let (s1 : seg_lib), _, _ = System.marshal_in_segment f ch in
   let (s2 : seg_univ option), _, _ = System.marshal_in_segment f ch in
-  let (s3 : seg_discharge option), _, _ = System.marshal_in_segment f ch in
   let tasks, _, _ = System.marshal_in_segment f ch in
-  let (s5 : seg_proofs), _, _ = System.marshal_in_segment f ch in
+  let (s4 : seg_proofs), _, _ = System.marshal_in_segment f ch in
   close_in ch;
   if tasks = None then user_err ~hdr:"restart" (str"not a .vio file");
   if s2 = None then user_err ~hdr:"restart" (str"not a .vio file");
-  if s3 = None then user_err ~hdr:"restart" (str"not a .vio file");
   if snd (Option.get s2) then user_err ~hdr:"restart" (str"not a .vio file");
-  s0, s1, Option.get s2, Option.get s3, Option.get tasks, s5
+  s0, s1, Option.get s2, Option.get tasks, s4
 
 (************************************************************************)
 (*s [save_library dir] ends library [dir] and save it to the disk. *)
@@ -578,10 +575,10 @@ let save_library_to ?todo ~output_native_objects dir f otab =
         List.fold_left (fun e (r,_) -> Future.UUIDSet.add r.Stateid.uuid e)
           Future.UUIDSet.empty l in
   let cenv, seg, ast = Declaremods.end_library ~output_native_objects ~except dir in
-  let opaque_table, disch_table, f2t_map = Opaqueproof.dump ~except otab in
-  let tasks, utab, dtab =
+  let opaque_table, f2t_map = Opaqueproof.dump ~except otab in
+  let tasks, utab =
     match todo with
-    | None -> None, None, None
+    | None -> None, None
     | Some (tasks, rcbackup) ->
         let tasks =
           List.map Stateid.(fun (r,b) ->
@@ -589,8 +586,8 @@ let save_library_to ?todo ~output_native_objects dir f otab =
             with Not_found -> assert b; { r with uuid = -1 }, b)
           tasks in
         Some (tasks,rcbackup),
-        Some (Univ.ContextSet.empty,false),
-        Some disch_table in
+        Some (Univ.ContextSet.empty,false)
+  in
   let sd = {
     md_name = dir;
     md_deps = Array.of_list (current_deps ());
@@ -610,7 +607,6 @@ let save_library_to ?todo ~output_native_objects dir f otab =
     System.marshal_out_segment f' ch (sd           : seg_sum);
     System.marshal_out_segment f' ch (md           : seg_lib);
     System.marshal_out_segment f' ch (utab         : seg_univ option);
-    System.marshal_out_segment f' ch (dtab         : seg_discharge option);
     System.marshal_out_segment f' ch (tasks        : 'tasks option);
     System.marshal_out_segment f' ch (opaque_table : seg_proofs);
     close_out ch;
@@ -630,7 +626,6 @@ let save_library_raw f sum lib univs proofs =
   System.marshal_out_segment f ch (sum        : seg_sum);
   System.marshal_out_segment f ch (lib        : seg_lib);
   System.marshal_out_segment f ch (Some univs : seg_univ option);
-  System.marshal_out_segment f ch (None       : seg_discharge option);
   System.marshal_out_segment f ch (None       : 'tasks option);
   System.marshal_out_segment f ch (proofs     : seg_proofs);
   close_out ch

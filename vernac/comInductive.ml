@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -121,7 +121,7 @@ let mk_mltype_data sigma env assums arity indname =
 let rec check_anonymous_type ind =
   let open Glob_term in
     match DAst.get ind with
-    | GSort (GType []) -> true
+    | GSort (UAnonymous {rigid=true}) -> true
     | GProd ( _, _, _, e)
     | GLetIn (_, _, _, e)
     | GLambda (_, _, _, e)
@@ -349,7 +349,7 @@ let restrict_inductive_universes sigma ctx_params arities constructors =
   let uvars = List.fold_right (fun (_,ctypes,_) -> List.fold_right merge_universes_of_constr ctypes) constructors uvars in
   Evd.restrict_universe_context sigma uvars
 
-let interp_mutual_inductive_gen env0 ~template udecl (uparamsl,paramsl,indl) notations cum poly prv finite =
+let interp_mutual_inductive_gen env0 ~template udecl (uparamsl,paramsl,indl) notations cum ~poly prv finite =
   check_all_names_different indl;
   List.iter check_param paramsl;
   if not (List.is_empty uparamsl) && not (List.is_empty notations)
@@ -375,8 +375,7 @@ let interp_mutual_inductive_gen env0 ~template udecl (uparamsl,paramsl,indl) not
   let env_ar_params = EConstr.push_rel_context ctx_params env_ar in
 
   (* Compute interpretation metadatas *)
-  let indimpls = List.map (fun impls -> userimpls @
-    lift_implicits (Context.Rel.nhyps ctx_params) impls) indimpls in
+  let indimpls = List.map (fun impls -> userimpls @ impls) indimpls in
   let impls = compute_internalization_env env_uparams sigma ~impls (Inductive (params,true)) indnames fullarities indimpls in
   let ntn_impls = compute_internalization_env env_uparams sigma (Inductive (params,true)) indnames fullarities indimpls in
   let mldatas = List.map2 (mk_mltype_data sigma env_params params) arities indnames in
@@ -402,8 +401,8 @@ let interp_mutual_inductive_gen env0 ~template udecl (uparamsl,paramsl,indl) not
                        constructors
   in
   let ctx_params = ctx_params @ ctx_uparams in
-  let userimpls = useruimpls @ (lift_implicits (Context.Rel.nhyps ctx_uparams) userimpls) in
-  let indimpls = List.map (fun iimpl -> useruimpls @ (lift_implicits (Context.Rel.nhyps ctx_uparams) iimpl)) indimpls in
+  let userimpls = useruimpls @ userimpls in
+  let indimpls = List.map (fun iimpl -> useruimpls @ iimpl) indimpls in
   let fullarities = List.map (fun c -> EConstr.it_mkProd_or_LetIn c ctx_uparams) fullarities in
   let env_ar = push_types env0 indnames relevances fullarities in
   let env_ar_params = EConstr.push_rel_context ctx_params env_ar in
@@ -450,10 +449,9 @@ let interp_mutual_inductive_gen env0 ~template udecl (uparamsl,paramsl,indl) not
       indl arities arityconcl constructors
   in
   let impls =
-    let len = Context.Rel.nhyps ctx_params in
       List.map2 (fun indimpls (_,_,cimpls) ->
         indimpls, List.map (fun impls ->
-          userimpls @ (lift_implicits len impls)) cimpls) indimpls constructors
+          userimpls @ impls) cimpls) indimpls constructors
   in
   let variance = if poly && cum then Some (InferCumulativity.dummy_variance uctx) else None in
   (* Build the mutual inductive entry *)
@@ -471,8 +469,8 @@ let interp_mutual_inductive_gen env0 ~template udecl (uparamsl,paramsl,indl) not
       InferCumulativity.infer_inductive env_ar mind_ent
    else mind_ent), Evd.universe_binders sigma, impls
 
-let interp_mutual_inductive ~template udecl (paramsl,indl) notations cum poly prv finite =
-  interp_mutual_inductive_gen (Global.env()) ~template udecl ([],paramsl,indl) notations cum poly prv finite
+let interp_mutual_inductive ~template udecl (paramsl,indl) notations cum ~poly prv finite =
+  interp_mutual_inductive_gen (Global.env()) ~template udecl ([],paramsl,indl) notations cum ~poly prv finite
 
 (* Very syntactical equality *)
 let eq_local_binders bl1 bl2 =
@@ -495,7 +493,7 @@ let extract_params indl =
 let extract_inductive indl =
   List.map (fun ({CAst.v=indname},_,ar,lc) -> {
     ind_name = indname;
-    ind_arity = Option.cata (fun x -> x) (CAst.make @@ CSort (Glob_term.GType [])) ar;
+    ind_arity = Option.cata (fun x -> x) (CAst.make @@ CSort (Glob_term.UAnonymous {rigid=true})) ar;
     ind_lc = List.map (fun (_,({CAst.v=id},t)) -> (id,t)) lc
   }) indl
 
@@ -559,23 +557,23 @@ let declare_mutual_inductive_with_eliminations ?(primitive_expected=false) mie p
   mind
 
 type one_inductive_impls =
-  Impargs.manual_explicitation list (* for inds *)*
-  Impargs.manual_explicitation list list (* for constrs *)
+  Impargs.manual_implicits (* for inds *) *
+  Impargs.manual_implicits list (* for constrs *)
 
 type uniform_inductive_flag =
   | UniformParameters
   | NonUniformParameters
 
-let do_mutual_inductive ~template udecl indl cum poly prv ~uniform finite =
+let do_mutual_inductive ~template udecl indl cum ~poly prv ~uniform finite =
   let (params,indl),coes,ntns = extract_mutual_inductive_declaration_components indl in
   (* Interpret the types *)
   let indl = match uniform with UniformParameters -> (params, [], indl) | NonUniformParameters -> ([], params, indl) in
-  let mie,pl,impls = interp_mutual_inductive_gen (Global.env()) ~template udecl indl ntns cum poly prv finite in
+  let mie,pl,impls = interp_mutual_inductive_gen (Global.env()) ~template udecl indl ntns cum ~poly prv finite in
   (* Declare the mutual inductive block with its associated schemes *)
   ignore (declare_mutual_inductive_with_eliminations mie pl impls);
   (* Declare the possible notations of inductive types *)
   List.iter (Metasyntax.add_notation_interpretation (Global.env ())) ntns;
   (* Declare the coercions *)
-  List.iter (fun qid -> Class.try_add_new_coercion (Nametab.locate qid) ~local:false poly) coes;
+  List.iter (fun qid -> Class.try_add_new_coercion (Nametab.locate qid) ~local:false ~poly) coes;
   (* If positivity is assumed declares itself as unsafe. *)
   if Environ.deactivated_guard (Global.env ()) then Feedback.feedback Feedback.AddedAxiom else ()

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -81,7 +81,6 @@ type locatable =
 type showable =
   | ShowGoal of goal_reference
   | ShowProof
-  | ShowScript
   | ShowExistentials
   | ShowUniverses
   | ShowProofNames
@@ -257,6 +256,8 @@ type extend_name =
      is given an offset, starting from zero. *)
   int
 
+type discharge = DoDischarge | NoDischarge
+
 type nonrec vernac_expr =
 
   | VernacLoad of verbose_flag * string
@@ -275,15 +276,15 @@ type nonrec vernac_expr =
   | VernacDeclareCustomEntry of string
 
   (* Gallina *)
-  | VernacDefinition of (Decl_kinds.discharge * Decl_kinds.definition_object_kind) * name_decl * definition_expr
+  | VernacDefinition of (discharge * Decl_kinds.definition_object_kind) * name_decl * definition_expr
   | VernacStartTheoremProof of Decl_kinds.theorem_kind * proof_expr list
   | VernacEndProof of proof_end
   | VernacExactProof of constr_expr
-  | VernacAssumption of (Decl_kinds.discharge * Decl_kinds.assumption_object_kind) *
+  | VernacAssumption of (discharge * Decl_kinds.assumption_object_kind) *
       Declaremods.inline * (ident_decl list * constr_expr) with_coercion list
   | VernacInductive of vernac_cumulative option * Decl_kinds.private_flag * inductive_flag * (inductive_expr * decl_notation list) list
-  | VernacFixpoint of Decl_kinds.discharge * (fixpoint_expr * decl_notation list) list
-  | VernacCoFixpoint of Decl_kinds.discharge * (cofixpoint_expr * decl_notation list) list
+  | VernacFixpoint of discharge * (fixpoint_expr * decl_notation list) list
+  | VernacCoFixpoint of discharge * (cofixpoint_expr * decl_notation list) list
   | VernacScheme of (lident option * scheme) list
   | VernacCombinedScheme of lident * lident list
   | VernacUniverse of lident list
@@ -362,8 +363,9 @@ type nonrec vernac_expr =
       vernac_argument_status list (* Main arguments status list *) *
         (Name.t * Impargs.implicit_kind) list list (* Extra implicit status lists *) *
       int option (* Number of args to trigger reduction *) *
+      int option (* Number of args before bidirectional typing *) *
         [ `ReductionDontExposeCase | `ReductionNeverUnfold | `Rename |
-          `ExtraScopes | `Assert | `ClearImplicits | `ClearScopes |
+          `ExtraScopes | `Assert | `ClearImplicits | `ClearScopes | `ClearBidiHint |
           `DefaultImplicits ] list
   | VernacReserve of simple_binder list
   | VernacGeneralizable of (lident list) option

@@ -44,10 +44,11 @@ val jmeq_refl : unit -> EConstr.constr
 
 val save
   :  Id.t
-  -> Safe_typing.private_constants Entries.definition_entry
-  -> ?hook:Lemmas.declaration_hook
+  -> Evd.side_effects Proof_global.proof_entry
+  -> ?hook:DeclareDef.Hook.t
   -> UState.t
-  -> Decl_kinds.goal_kind
+  -> DeclareDef.locality
+  -> Decl_kinds.goal_object_kind
   -> unit
 
 (* [with_full_print f a] applies [f] to [a] in full printing environment.

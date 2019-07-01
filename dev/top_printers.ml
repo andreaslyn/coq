@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -532,8 +532,8 @@ let _ =
   let open Vernacextend in
   let ty_constr = Extend.TUentry (get_arg_tag Stdarg.wit_constr) in
   let cmd_sig = TyTerminal("PrintConstr", TyNonTerminal(ty_constr, TyNil)) in
-  let cmd_fn c ~atts ~st = in_current_context econstr_display c; st in
-  let cmd_class _ = VtQuery,VtNow in
+  let cmd_fn c ~atts = VtDefault (fun () -> in_current_context econstr_display c) in
+  let cmd_class _ = VtQuery in
   let cmd : ty_ml = TyML (false, cmd_sig, cmd_fn, Some cmd_class) in
   vernac_extend ~command:"PrintConstr" [cmd]
 
@@ -541,8 +541,8 @@ let _ =
   let open Vernacextend in
   let ty_constr = Extend.TUentry (get_arg_tag Stdarg.wit_constr) in
   let cmd_sig = TyTerminal("PrintPureConstr", TyNonTerminal(ty_constr, TyNil)) in
-  let cmd_fn c ~atts ~st = in_current_context print_pure_econstr c; st in
-  let cmd_class _ = VtQuery,VtNow in
+  let cmd_fn c ~atts = VtDefault (fun () -> in_current_context print_pure_econstr c) in
+  let cmd_class _ = VtQuery in
   let cmd : ty_ml = TyML (false, cmd_sig, cmd_fn, Some cmd_class) in
   vernac_extend ~command:"PrintPureConstr" [cmd]
 

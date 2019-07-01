@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -12,11 +12,6 @@ open Environ
 open Constr
 open Evd
 open Names
-
-(* This is a hack to make it possible for Obligations to craft a Qed
- * behind the scenes.  The fix_exn the Stm attaches to the Future proof
- * is not available here, so we provide a side channel to get it *)
-val stm_get_fix_exn : (unit -> Exninfo.iexn -> Exninfo.iexn) Hook.t
 
 val check_evars : env -> evar_map -> unit
 
@@ -45,59 +40,50 @@ type obligation_info =
     (* ident, type, location, (opaque or transparent, expand or define),
        dependencies, tactic to solve it *)
 
-type progress = (* Resolution status of a program *)
-  | Remain of int  (* n obligations remaining *)
-  | Dependent (* Dependent on other definitions *)
-  | Defined of GlobRef.t (* Defined as id *)
-
 val default_tactic : unit Proofview.tactic ref
 
 val add_definition
-  :  Names.Id.t
+  :  name:Names.Id.t
   -> ?term:constr -> types
   -> UState.t
   -> ?univdecl:UState.universe_decl (* Universe binders and constraints *)
-  -> ?implicits:(Constrexpr.explicitation * (bool * bool * bool)) list
-  -> ?kind:Decl_kinds.definition_kind
+  -> ?implicits:Impargs.manual_implicits
+  -> poly:bool
+  -> ?scope:DeclareDef.locality
+  -> ?kind:Decl_kinds.definition_object_kind
   -> ?tactic:unit Proofview.tactic
   -> ?reduce:(constr -> constr)
-  -> ?hook:Lemmas.declaration_hook
+  -> ?hook:DeclareDef.Hook.t
   -> ?opaque:bool
   -> obligation_info
-  -> progress
+  -> DeclareObl.progress
 
-type notations =
-    (lstring * Constrexpr.constr_expr * Notation_term.scope_name option) list
-
-type fixpoint_kind =
-  | IsFixpoint of lident option list
-  | IsCoFixpoint
-
-val add_mutual_definitions :
-  (Names.Id.t * constr * types *
-      (Constrexpr.explicitation * (bool * bool * bool)) list * obligation_info) list ->
-  UState.t ->
-  ?univdecl:UState.universe_decl -> (* Universe binders and constraints *)
-  ?tactic:unit Proofview.tactic ->
-  ?kind:Decl_kinds.definition_kind ->
-  ?reduce:(constr -> constr) ->
-  ?hook:Lemmas.declaration_hook -> ?opaque:bool ->
-  notations ->
-  fixpoint_kind -> unit
+val add_mutual_definitions
+  : (Names.Id.t * constr * types * Impargs.manual_implicits * obligation_info) list
+  -> UState.t
+  -> ?univdecl:UState.universe_decl
+  (** Universe binders and constraints *)
+  -> ?tactic:unit Proofview.tactic
+  -> poly:bool
+  -> ?scope:DeclareDef.locality
+  -> ?kind:Decl_kinds.definition_object_kind
+  -> ?reduce:(constr -> constr)
+  -> ?hook:DeclareDef.Hook.t -> ?opaque:bool
+  -> DeclareObl.notations
+  -> DeclareObl.fixpoint_kind -> unit
 
 val obligation
-  :  ontop:Proof_global.t option
-  -> int * Names.Id.t option * Constrexpr.constr_expr option
+  :  int * Names.Id.t option * Constrexpr.constr_expr option
   -> Genarg.glob_generic_argument option
-  -> Proof_global.t
+  -> Lemmas.t
 
 val next_obligation
-  :  ontop:Proof_global.t option
-  -> Names.Id.t option
+  :  Names.Id.t option
   -> Genarg.glob_generic_argument option
-  -> Proof_global.t
+  -> Lemmas.t
 
-val solve_obligations : Names.Id.t option -> unit Proofview.tactic option -> progress
+val solve_obligations : Names.Id.t option -> unit Proofview.tactic option
+  -> DeclareObl.progress
 (* Number of remaining obligations to be solved for this program *)
 
 val solve_all_obligations : unit Proofview.tactic option -> unit
@@ -117,6 +103,3 @@ exception NoObligations of Names.Id.t option
 val explain_no_obligations : Names.Id.t option -> Pp.t
 
 val check_program_libraries : unit -> unit
-
-type program_info
-val program_tcc_summary_tag : program_info Id.Map.t Summary.Dyn.tag

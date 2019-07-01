@@ -1,9 +1,11 @@
 (************************************************************************)
-(*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2017     *)
+(*         *   The Coq Proof Assistant / The Coq Development Team       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
+(* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
-(*    //   *      This file is distributed under the terms of the       *)
-(*         *       GNU Lesser General Public License Version 2.1        *)
+(*    //   *    This file is distributed under the terms of the         *)
+(*         *     GNU Lesser General Public License Version 2.1          *)
+(*         *     (see LICENSE file for the text of the license)         *)
 (************************************************************************)
 
 type loc = {
@@ -103,7 +105,7 @@ type classification =
 
 type vernac_rule = {
   vernac_atts : (string * string) list option;
-  vernac_state: string option;
+  vernac_state : string option;
   vernac_toks : ext_token list;
   vernac_class : code option;
   vernac_depr : bool;
@@ -114,6 +116,7 @@ type vernac_ext = {
   vernacext_name : string;
   vernacext_entry : code option;
   vernacext_class : classification;
+  vernacext_state : string option;
   vernacext_rules : vernac_rule list;
 }
 

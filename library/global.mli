@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -46,7 +46,7 @@ val export_private_constants : in_section:bool ->
   Constr.constr Univ.in_universe_context_set * Safe_typing.exported_private_constant list
 
 val add_constant :
-  ?role:Entries.side_effect_role -> in_section:bool -> Id.t -> Safe_typing.global_declaration -> Constant.t * Safe_typing.private_constants
+  side_effect:'a Safe_typing.effect_entry -> in_section:bool -> Id.t -> Safe_typing.global_declaration -> Constant.t * 'a
 val add_recipe : in_section:bool -> Id.t -> Cooking.recipe -> Constant.t
 val add_mind :
   Id.t -> Entries.mutual_inductive_entry -> MutInd.t
@@ -100,13 +100,16 @@ val mind_of_delta_kn : KerName.t -> MutInd.t
 
 val opaque_tables : unit -> Opaqueproof.opaquetab
 
-val body_of_constant : Opaqueproof.indirect_accessor -> Constant.t -> (Constr.constr * Univ.AUContext.t) option
+val body_of_constant : Opaqueproof.indirect_accessor -> Constant.t ->
+  (Constr.constr * unit Opaqueproof.delayed_universes * Univ.AUContext.t) option
 (** Returns the body of the constant if it has any, and the polymorphic context
     it lives in. For monomorphic constant, the latter is empty, and for
     polymorphic constants, the term contains De Bruijn universe variables that
     need to be instantiated. *)
 
-val body_of_constant_body : Opaqueproof.indirect_accessor -> Opaqueproof.opaque Declarations.constant_body -> (Constr.constr * Univ.AUContext.t) option
+val body_of_constant_body : Opaqueproof.indirect_accessor ->
+  Opaqueproof.opaque Declarations.constant_body ->
+    (Constr.constr * unit Opaqueproof.delayed_universes * Univ.AUContext.t) option
 (** Same as {!body_of_constant} but on {!Declarations.constant_body}. *)
 
 (** {6 Compiled libraries } *)

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -14,12 +14,6 @@ open Constrexpr
 open Typeclasses
 open Libnames
 
-(** Errors *)
-
-val mismatched_params : env -> constr_expr list -> Constr.rel_context -> 'a
-
-val mismatched_props : env -> constr_expr list -> Constr.rel_context -> 'a
-
 (** Instance declaration *)
 
 val declare_instance : ?warn:bool -> env -> Evd.evar_map ->
@@ -31,39 +25,46 @@ val declare_instance : ?warn:bool -> env -> Evd.evar_map ->
 val existing_instance : bool -> qualid -> Hints.hint_info_expr option -> unit
 (** globality, reference, optional priority and pattern information *)
 
-val declare_instance_constant :
-  typeclass ->
-  Hints.hint_info_expr (** priority *) ->
-  bool (** globality *) ->
-  Impargs.manual_explicitation list (** implicits *) ->
-  ?hook:(GlobRef.t -> unit) ->
-  Id.t (** name *) ->
-  UState.universe_decl ->
-  bool (** polymorphic *) ->
-  Evd.evar_map (** Universes *) ->
-  Constr.t (** body *) ->
-  Constr.types (** type *) ->
-  unit
+val new_instance_interactive
+  :  ?global:bool (** Not global by default. *)
+  -> poly:bool
+  -> name_decl
+  -> local_binder_expr list
+  -> constr_expr
+  -> ?generalize:bool
+  -> ?tac:unit Proofview.tactic
+  -> ?hook:(GlobRef.t -> unit)
+  -> Hints.hint_info_expr
+  -> Id.t * Lemmas.t
 
-val new_instance :
-  pstate:Proof_global.t option
-  -> ?global:bool (** Not global by default. *)
-  -> program_mode:bool
-  -> Decl_kinds.polymorphic
+val new_instance
+  :  ?global:bool (** Not global by default. *)
+  -> poly:bool
+  -> name_decl
+  -> local_binder_expr list
+  -> constr_expr
+  -> (bool * constr_expr)
+  -> ?generalize:bool
+  -> ?hook:(GlobRef.t -> unit)
+  -> Hints.hint_info_expr
+  -> Id.t
+
+val new_instance_program
+  : ?global:bool (** Not global by default. *)
+  -> poly:bool
   -> name_decl
   -> local_binder_expr list
   -> constr_expr
   -> (bool * constr_expr) option
   -> ?generalize:bool
-  -> ?tac:unit Proofview.tactic
   -> ?hook:(GlobRef.t -> unit)
   -> Hints.hint_info_expr
-  -> Id.t * Proof_global.t option (* May open a proof *)
+  -> Id.t
 
 val declare_new_instance
   : ?global:bool (** Not global by default. *)
   -> program_mode:bool
-  -> Decl_kinds.polymorphic
+  -> poly:bool
   -> ident_decl
   -> local_binder_expr list
   -> constr_expr

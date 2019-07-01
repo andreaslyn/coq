@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -214,7 +214,8 @@ let process_universe_constraints ctx cstrs =
   | Inr l, Inl r | Inl r, Inr l ->
     let alg = LSet.mem l ctx.uctx_univ_algebraic in
     let inst = univ_level_rem l r r in
-      if alg then (instantiate_variable l inst vars; local)
+      if alg && not (LSet.mem l (Universe.levels inst)) then
+        (instantiate_variable l inst vars; local)
       else
         let lu = Universe.make l in
         if univ_level_mem l r then
@@ -452,9 +453,9 @@ let restrict ctx vars =
   let uctx' = restrict_universe_context ctx.uctx_local vars in
   { ctx with uctx_local = uctx' }
 
-let demote_seff_univs entry uctx =
+let demote_seff_univs universes uctx =
   let open Entries in
-  match entry.const_entry_universes with
+  match universes with
   | Polymorphic_entry _ -> uctx
   | Monomorphic_entry (univs, _) ->
     let seff = LSet.union uctx.uctx_seff_univs univs in

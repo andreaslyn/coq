@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -89,7 +89,3 @@ val iprint_no_report : Exninfo.iexn -> Pp.t
     Typical example: [Sys.Break], [Assert_failure], [Anomaly] ...
 *)
 val noncritical : exn -> bool
-
-(** Check whether an exception is handled by some toplevel printer. The
-    [Anomaly] exception is never handled. *)
-val handled : exn -> bool

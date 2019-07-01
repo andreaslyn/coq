@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -51,6 +51,18 @@ module NamedDecl = Context.Named.Declaration
 type typing_constraint = OfType of types | IsType | WithoutTypeConstraint
 
 let (!!) env = GlobEnv.env env
+
+let bidi_hints =
+  Summary.ref (GlobRef.Map.empty : int GlobRef.Map.t) ~name:"bidirectionalityhints"
+
+let add_bidirectionality_hint gr n =
+  bidi_hints := GlobRef.Map.add gr n !bidi_hints
+
+let get_bidirectionality_hint gr =
+  GlobRef.Map.find_opt gr !bidi_hints
+
+let clear_bidirectionality_hint gr =
+  bidi_hints := GlobRef.Map.remove gr !bidi_hints
 
 (************************************************************************)
 (* This concerns Cases *)
@@ -120,7 +132,7 @@ let is_strict_universe_declarations =
 
 (** Miscellaneous interpretation functions *)
 
-let interp_known_universe_level evd qid =
+let interp_known_universe_level_name evd qid =
   try
     let open Libnames in
     if qualid_is_ident qid then Evd.universe_of_name evd @@ qualid_basename qid
@@ -130,7 +142,7 @@ let interp_known_universe_level evd qid =
     Univ.Level.make qid
 
 let interp_universe_level_name ~anon_rigidity evd qid =
-  try evd, interp_known_universe_level evd qid
+  try evd, interp_known_universe_level_name evd qid
   with Not_found ->
     if Libnames.qualid_is_ident qid then (* Undeclared *)
       let id = Libnames.qualid_basename qid in
@@ -152,43 +164,30 @@ let interp_universe_level_name ~anon_rigidity evd qid =
         with UGraph.AlreadyDeclared -> evd
       in evd, level
 
-let interp_universe ?loc evd = function
-  | [] -> let evd, l = new_univ_level_variable ?loc univ_rigid evd in
-	    evd, Univ.Universe.make l
-  | l ->
-    List.fold_left (fun (evd, u) l ->
-      let evd', u' =
-        match l with
-        | Some (l,n) ->
-           (* [univ_flexible_alg] can produce algebraic universes in terms *)
-           let anon_rigidity = univ_flexible in
-           let evd', l = interp_universe_level_name ~anon_rigidity evd l in
-           let u' = Univ.Universe.make l in
-           (match n with
-            | 0 -> evd', u'
-            | 1 -> evd', Univ.Universe.super u'
-            | _ ->
-               user_err ?loc ~hdr:"interp_universe"
-                        (Pp.(str "Cannot interpret universe increment +" ++ int n)))
-        | None ->
-           let evd, l = new_univ_level_variable ?loc univ_flexible evd in
-           evd, Univ.Universe.make l
+let interp_universe_name ?loc evd l =
+  (* [univ_flexible_alg] can produce algebraic universes in terms *)
+  let anon_rigidity = univ_flexible in
+  let evd', l = interp_universe_level_name ~anon_rigidity evd l in
+  evd', l
+
+let interp_sort_name ?loc sigma = function
+  | GSProp -> sigma, Univ.Level.sprop
+  | GProp -> sigma, Univ.Level.prop
+  | GSet -> sigma, Univ.Level.set
+  | GType l -> interp_universe_name ?loc sigma l
+
+let interp_sort_info ?loc evd l =
+    List.fold_left (fun (evd, u) (l,n) ->
+      let evd', u' = interp_sort_name ?loc evd l in
+      let u' = Univ.Universe.make u' in
+      let u' = match n with
+      | 0 -> u'
+      | 1 -> Univ.Universe.super u'
+      | n ->
+        user_err ?loc ~hdr:"interp_universe"
+          (Pp.(str "Cannot interpret universe increment +" ++ int n))
       in (evd', Univ.sup u u'))
     (evd, Univ.Universe.type0m) l
-
-let interp_known_level_info ?loc evd = function
-  | UUnknown | UAnonymous ->
-    user_err ?loc ~hdr:"interp_known_level_info"
-      (str "Anonymous universes not allowed here.")
-  | UNamed qid ->
-    try interp_known_universe_level evd qid
-    with Not_found ->
-      user_err ?loc ~hdr:"interp_known_level_info" (str "Undeclared universe " ++ Libnames.pr_qualid qid)
-
-let interp_level_info ?loc evd : level_info -> _ = function
-  | UUnknown -> new_univ_level_variable ?loc univ_rigid evd
-  | UAnonymous -> new_univ_level_variable ?loc univ_flexible evd
-  | UNamed s -> interp_universe_level_name ~anon_rigidity:univ_flexible evd s
 
 type inference_hook = env -> evar_map -> Evar.t -> evar_map * constr
 
@@ -403,13 +402,14 @@ let interp_known_glob_level ?loc evd = function
   | GSProp -> Univ.Level.sprop
   | GProp -> Univ.Level.prop
   | GSet -> Univ.Level.set
-  | GType s -> interp_known_level_info ?loc evd s
+  | GType qid ->
+    try interp_known_universe_level_name evd qid
+    with Not_found ->
+      user_err ?loc ~hdr:"interp_known_level_info" (str "Undeclared universe " ++ Libnames.pr_qualid qid)
 
 let interp_glob_level ?loc evd : glob_level -> _ = function
-  | GSProp -> evd, Univ.Level.sprop
-  | GProp -> evd, Univ.Level.prop
-  | GSet -> evd, Univ.Level.set
-  | GType s -> interp_level_info ?loc evd s
+  | UAnonymous {rigid} -> new_univ_level_variable ?loc (if rigid then univ_rigid else univ_flexible) evd
+  | UNamed s -> interp_sort_name ?loc evd s
 
 let interp_instance ?loc evd l =
   let evd, l' =
@@ -448,18 +448,26 @@ let pretype_ref ?loc sigma env ref us =
     let ty = unsafe_type_of !!env sigma c in
     sigma, make_judge c ty
 
-let judge_of_Type ?loc evd s =
-  let evd, s = interp_universe ?loc evd s in
+let interp_sort ?loc evd : glob_sort -> _ = function
+  | UAnonymous {rigid} ->
+    let evd, l = new_univ_level_variable ?loc (if rigid then univ_rigid else univ_flexible) evd in
+    evd, Univ.Universe.make l
+  | UNamed l -> interp_sort_info ?loc evd l
+
+let judge_of_sort ?loc evd s =
   let judge = 
     { uj_val = mkType s; uj_type = mkType (Univ.super s) }
   in
     evd, judge
 
-let pretype_sort ?loc sigma = function
-  | GSProp -> sigma, judge_of_sprop
-  | GProp -> sigma, judge_of_prop
-  | GSet -> sigma, judge_of_set
-  | GType s -> judge_of_Type ?loc sigma s
+let pretype_sort ?loc sigma s =
+  match s with
+  | UNamed [GSProp,0] -> sigma, judge_of_sprop
+  | UNamed [GProp,0] -> sigma, judge_of_prop
+  | UNamed [GSet,0] -> sigma, judge_of_set
+  | _ ->
+  let sigma, s = interp_sort ?loc sigma s in
+  judge_of_sort ?loc sigma s
 
 let new_type_evar env sigma loc =
   new_type_evar env sigma ~src:(Loc.tag ?loc Evar_kinds.InternalHole)
@@ -635,24 +643,36 @@ let rec pretype ~program_mode ~poly resolve_tc (tycon : type_constraint) (env : 
     let sigma, fj = pretype empty_tycon env sigma f in
     let floc = loc_of_glob_constr f in
     let length = List.length args in
+    let nargs_before_bidi =
+      (* if `f` is a global, we retrieve bidirectionality hints *)
+      try
+        let (gr,_) = destRef sigma fj.uj_val in
+        Option.default length @@ GlobRef.Map.find_opt gr !bidi_hints
+      with DestKO ->
+        length
+    in
     let candargs =
-	(* Bidirectional typechecking hint: 
-	   parameters of a constructor are completely determined
-	   by a typing constraint *)
+      (* Bidirectional typechecking hint:
+         parameters of a constructor are completely determined
+         by a typing constraint *)
+      (* This bidirectionality machinery is the one of `Program` for
+         constructors and is orthogonal to bidirectionality hints. However, we
+         could probably factorize both by providing default bidirectionality hints
+         for constructors corresponding to their number of parameters. *)
       if program_mode && length > 0 && isConstruct sigma fj.uj_val then
-	match tycon with
-	| None -> []
-	| Some ty ->
+        match tycon with
+        | None -> []
+        | Some ty ->
           let ((ind, i), u) = destConstruct sigma fj.uj_val in
           let npars = inductive_nparams !!env ind in
-	    if Int.equal npars 0 then []
-	    else
-	      try
-                let IndType (indf, args) = find_rectype !!env sigma ty in
-	  	let ((ind',u'),pars) = dest_ind_family indf in
-	  	  if eq_ind ind ind' then List.map EConstr.of_constr pars
-	  	  else (* Let the usual code throw an error *) []
-	      with Not_found -> []
+          if Int.equal npars 0 then []
+          else
+            try
+              let IndType (indf, args) = find_rectype !!env sigma ty in
+              let ((ind',u'),pars) = dest_ind_family indf in
+              if eq_ind ind ind' then List.map EConstr.of_constr pars
+              else (* Let the usual code throw an error *) []
+            with Not_found -> []
       else []
     in
     let app_f = 
@@ -662,20 +682,29 @@ let rec pretype ~program_mode ~poly resolve_tc (tycon : type_constraint) (env : 
         let p = Projection.make p false in
         let npars = Projection.npars p in
         fun n ->
-          if n == npars + 1 then fun _ v -> mkProj (p, v)
+          if Int.equal n npars then fun _ v -> mkProj (p, v)
           else fun f v -> applist (f, [v])
       | _ -> fun _ f v -> applist (f, [v])
     in
-    let rec apply_rec env sigma n resj candargs = function
-      | [] -> sigma, resj
+    let rec apply_rec env sigma n resj candargs bidiargs = function
+      | [] -> sigma, resj, List.rev bidiargs
       | c::rest ->
+        let bidi = n >= nargs_before_bidi in
         let argloc = loc_of_glob_constr c in
         let sigma, resj = Coercion.inh_app_fun ~program_mode resolve_tc !!env sigma resj in
         let resty = whd_all !!env sigma resj.uj_type in
         match EConstr.kind sigma resty with
         | Prod (na,c1,c2) ->
           let tycon = Some c1 in
-          let sigma, hj = pretype tycon env sigma c in
+          let (sigma, hj), bidiargs =
+            if bidi && Option.has_some tycon then
+              (* We want to get some typing information from the context before
+              typing the argument, so we replace it by an existential
+              variable *)
+              let sigma, c_hole = new_evar env sigma ~src:(loc,Evar_kinds.InternalHole) c1 in
+              (sigma, make_judge c_hole c1), (c_hole, c) :: bidiargs
+            else pretype tycon env sigma c, bidiargs
+          in
           let sigma, candargs, ujval =
             match candargs with
             | [] -> sigma, [], j_val hj
@@ -687,30 +716,45 @@ let rec pretype ~program_mode ~poly resolve_tc (tycon : type_constraint) (env : 
                   sigma, args, nf_evar sigma (j_val hj)
               end
           in
-            let sigma, ujval = adjust_evar_source sigma na.binder_name ujval in
-            let value, typ = app_f n (j_val resj) ujval, subst1 ujval c2 in
-	    let j = { uj_val = value; uj_type = typ } in
-            apply_rec env sigma (n+1) j candargs rest
-	  | _ ->
-            let sigma, hj = pretype empty_tycon env sigma c in
-	      error_cant_apply_not_functional
-                ?loc:(Loc.merge_opt floc argloc) !!env sigma resj [|hj|]
+          let sigma, ujval = adjust_evar_source sigma na.binder_name ujval in
+          let value, typ = app_f n (j_val resj) ujval, subst1 ujval c2 in
+          let j = { uj_val = value; uj_type = typ } in
+          apply_rec env sigma (n+1) j candargs bidiargs rest
+        | _ ->
+          let sigma, hj = pretype empty_tycon env sigma c in
+          error_cant_apply_not_functional
+            ?loc:(Loc.merge_opt floc argloc) !!env sigma resj [|hj|]
     in
-    let sigma, resj = apply_rec env sigma 1 fj candargs args in
+    let sigma, resj, bidiargs = apply_rec env sigma 0 fj candargs [] args in
     let sigma, resj =
       match EConstr.kind sigma resj.uj_val with
       | App (f,args) ->
-          if Termops.is_template_polymorphic_ind !!env sigma f then
-	    (* Special case for inductive type applications that must be 
-	       refreshed right away. *)
-            let c = mkApp (f, args) in
-            let sigma, c = Evarsolve.refresh_universes (Some true) !!env sigma c in
-            let t = Retyping.get_type_of !!env sigma c in
-            sigma, make_judge c (* use this for keeping evars: resj.uj_val *) t
-          else sigma, resj
+        if Termops.is_template_polymorphic_ind !!env sigma f then
+          (* Special case for inductive type applications that must be
+             refreshed right away. *)
+          let c = mkApp (f, args) in
+          let sigma, c = Evarsolve.refresh_universes (Some true) !!env sigma c in
+          let t = Retyping.get_type_of !!env sigma c in
+          sigma, make_judge c (* use this for keeping evars: resj.uj_val *) t
+        else sigma, resj
       | _ -> sigma, resj
     in
-    inh_conv_coerce_to_tycon ?loc env sigma resj tycon
+    let sigma, t = inh_conv_coerce_to_tycon ?loc env sigma resj tycon in
+    let refine_arg sigma (newarg,origarg) =
+      (* Refine an argument (originally `origarg`) represented by an evar
+         (`newarg`) to use typing information from the context *)
+      (* Recover the expected type of the argument *)
+      let ty = Retyping.get_type_of !!env sigma newarg in
+      (* Type the argument using this expected type *)
+      let sigma, j = pretype (Some ty) env sigma origarg in
+      (* Unify the (possibly refined) existential variable with the
+      (typechecked) original value *)
+      Evarconv.unify_delay !!env sigma newarg (j_val j)
+    in
+    (* We now refine any arguments whose typing was delayed for
+       bidirectionality *)
+    let sigma = List.fold_left refine_arg sigma bidiargs in
+    (sigma, t)
 
   | GLambda(name,bk,c1,c2) ->
     let sigma, tycon' =

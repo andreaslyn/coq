@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -131,7 +131,7 @@ let v_proj = v_tuple "projection" [|v_proj_repr; v_bool|]
 let rec v_constr =
   Sum ("constr",0,[|
     [|Int|]; (* Rel *)
-    [|Fail "Var"|]; (* Var *)
+    [|v_id|]; (* Var *)
     [|Fail "Meta"|]; (* Meta *)
     [|Fail "Evar"|]; (* Evar *)
     [|v_sort|]; (* Sort *)
@@ -230,7 +230,6 @@ let v_cb = v_tuple "constant_body"
     v_relevance;
     Any;
     v_univs;
-    Opt v_context_set;
     v_bool;
     v_typing_flags|]
 
@@ -383,6 +382,25 @@ let v_libsum =
 let v_lib =
   Tuple ("library",[|v_compiled_lib;v_libraryobjs|])
 
-let v_opaques = Array (Opt v_constr)
+let v_ndecl = v_sum "named_declaration" 0
+    [| [|v_binder_annot v_id; v_constr|];               (* LocalAssum *)
+       [|v_binder_annot v_id; v_constr; v_constr|] |]   (* LocalDef *)
+
+let v_nctxt = List v_ndecl
+
+let v_work_list =
+  let v_abstr = v_pair v_instance (Array v_id) in
+  Tuple ("work_list", [|v_hmap v_cst v_abstr; v_hmap v_cst v_abstr|])
+
+let v_abstract =
+  Tuple ("abstract", [| v_nctxt; v_instance; v_abs_context |])
+
+let v_cooking_info =
+  Tuple ("cooking_info", [|v_work_list; v_abstract|])
+
+let v_delayed_universes =
+  Sum ("delayed_universes", 0, [| [| v_unit |]; [| Int; v_context_set |] |])
+
+let v_opaques = Array (Tuple ("opaque", [| List v_cooking_info; Opt (v_pair v_constr v_delayed_universes) |]))
 let v_univopaques =
   Opt (Tuple ("univopaques",[|v_context_set;v_bool|]))

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -35,8 +35,7 @@ type seg_sum
 type seg_lib
 type seg_univ = (* all_cst, finished? *)
   Univ.ContextSet.t * bool
-type seg_discharge = Opaqueproof.cooking_info list array
-type seg_proofs = Constr.constr option array
+type seg_proofs = Opaqueproof.opaque_proofterm array
 
 (** Open a module (or a library); if the boolean is true then it's also
    an export otherwise just a simple import *)
@@ -51,7 +50,7 @@ val save_library_to :
 
 val load_library_todo
   :  CUnix.physical_path
-  -> seg_sum * seg_lib * seg_univ * seg_discharge * 'tasks * seg_proofs
+  -> seg_sum * seg_lib * seg_univ * 'tasks * seg_proofs
 
 val save_library_raw : string -> seg_sum -> seg_lib -> seg_univ -> seg_proofs -> unit
 

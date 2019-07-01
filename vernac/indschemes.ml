@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -21,7 +21,6 @@ open CErrors
 open Util
 open Names
 open Declarations
-open Entries
 open Term
 open Constr
 open Inductive
@@ -101,18 +100,19 @@ let () =
 
 (* Util *)
 
-let define ~poly id internal sigma c t =
-  let f = declare_constant ~internal in
+let define ~poly id sigma c t =
+  let f = declare_constant in
   let univs = Evd.univ_entry ~poly sigma in
+  let open Proof_global in
   let kn = f id
     (DefinitionEntry
-      { const_entry_body = c;
-        const_entry_secctx = None;
-        const_entry_type = t;
-	const_entry_universes = univs;
-        const_entry_opaque = false;
-        const_entry_inline_code = false;
-        const_entry_feedback = None;
+      { proof_entry_body = c;
+        proof_entry_secctx = None;
+        proof_entry_type = t;
+        proof_entry_universes = univs;
+        proof_entry_opaque = false;
+        proof_entry_inline_code = false;
+        proof_entry_feedback = None;
       },
       Decl_kinds.IsDefinition Scheme) in
   definition_message id;
@@ -414,8 +414,8 @@ let do_mutual_induction_scheme ?(force_mutual=false) lnamedepindsort =
   let declare decl fi lrecref =
     let decltype = Retyping.get_type_of env0 sigma (EConstr.of_constr decl) in
     let decltype = EConstr.to_constr sigma decltype in
-    let proof_output = Future.from_val ((decl,Univ.ContextSet.empty),Safe_typing.empty_private_constants) in
-    let cst = define ~poly fi UserIndividualRequest sigma proof_output (Some decltype) in
+    let proof_output = Future.from_val ((decl,Univ.ContextSet.empty),Evd.empty_side_effects) in
+    let cst = define ~poly fi sigma proof_output (Some decltype) in
     ConstRef cst :: lrecref
   in
   let _ = List.fold_right2 declare listdecl lrecnames [] in
@@ -536,7 +536,7 @@ let do_combined_scheme name schemes =
       schemes
   in
   let sigma,body,typ = build_combined_scheme (Global.env ()) csts in
-  let proof_output = Future.from_val ((body,Univ.ContextSet.empty),Safe_typing.empty_private_constants) in
+  let proof_output = Future.from_val ((body,Univ.ContextSet.empty),Evd.empty_side_effects) in
   (* It is possible for the constants to have different universe
      polymorphism from each other, however that is only when the user
      manually defined at least one of them (as Scheme would pick the
@@ -544,7 +544,7 @@ let do_combined_scheme name schemes =
      some other polymorphism they can also manually define the
      combined scheme. *)
   let poly = Global.is_polymorphic (ConstRef (List.hd csts)) in
-  ignore (define ~poly name.v UserIndividualRequest sigma proof_output (Some typ));
+  ignore (define ~poly name.v sigma proof_output (Some typ));
   fixpoint_message None [name.v]
 
 (**********************************************************************)

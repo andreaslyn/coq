@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -31,8 +31,8 @@ let ml_file_copy input output =
 
 let write_uint63 () =
   ml_file_copy
-    (if max_int = 1073741823 (* 32-bits *) then "uint63_x86.ml"
-     else (* 64 bits *) "uint63_amd64.ml")
+    (if max_int = 1073741823 (* 32-bits *) then "uint63_i386_31.ml"
+     else (* 64 bits *) "uint63_amd64_63.ml")
     "uint63.ml"
 
 let () = write_uint63 ()

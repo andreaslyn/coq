@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -128,6 +128,7 @@ module Options = struct
   [ { enabled = false; cmd = "-debug"; }
   ; { enabled = false; cmd = "-native_compiler"; }
   ; { enabled = true; cmd = "-allow-sprop"; }
+  ; { enabled = true; cmd = "-w +default"; }
   ]
 
   let build_coq_flags () =

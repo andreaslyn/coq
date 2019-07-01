@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -32,7 +32,11 @@ type vernac_keep_as = VtKeepAxiom | VtKeepDefined | VtKeepOpaque
 
 type vernac_qed_type = VtKeep of vernac_keep_as | VtDrop
 
-type vernac_type =
+type vernac_when =
+  | VtNow
+  | VtLater
+
+type vernac_classification =
   (* Start of a proof *)
   | VtStartProof of vernac_start
   (* Command altering the global state, bad for parallel
@@ -53,7 +57,7 @@ type vernac_type =
   (* To be removed *)
   | VtMeta
 and vernac_start = opacity_guarantee * Names.Id.t list
-and vernac_sideff_type = Names.Id.t list
+and vernac_sideff_type = Names.Id.t list * vernac_when
 and opacity_guarantee =
   | GuaranteesOpacity (** Only generates opaque terms at [Qed] *)
   | Doesn'tGuaranteeOpacity (** May generate transparent terms even with [Qed].*)
@@ -64,25 +68,29 @@ and anon_abstracting_tac = bool (** abstracting anonymously its result *)
 
 and proof_block_name = string (** open type of delimiters *)
 
-type vernac_when =
-  | VtNow
-  | VtLater
-type vernac_classification = vernac_type * vernac_when
-
 (** Interpretation of extended vernac phrases. *)
 
-type 'a vernac_command = 'a -> atts:Attributes.vernac_flags -> st:Vernacstate.t -> Vernacstate.t
+type typed_vernac =
+  | VtDefault of (unit -> unit)
+  | VtNoProof of (unit -> unit)
+  | VtCloseProof of (lemma:Lemmas.t -> unit)
+  | VtOpenProof of (unit -> Lemmas.t)
+  | VtModifyProof of (pstate:Proof_global.t -> Proof_global.t)
+  | VtReadProofOpt of (pstate:Proof_global.t option -> unit)
+  | VtReadProof of (pstate:Proof_global.t -> unit)
+
+type vernac_command = atts:Attributes.vernac_flags -> typed_vernac
 
 type plugin_args = Genarg.raw_generic_argument list
 
-val call : Vernacexpr.extend_name -> plugin_args -> atts:Attributes.vernac_flags -> st:Vernacstate.t -> Vernacstate.t
+val type_vernac : Vernacexpr.extend_name -> plugin_args -> vernac_command
 
 (** {5 VERNAC EXTEND} *)
 
 type classifier = Genarg.raw_generic_argument list -> vernac_classification
 
 type (_, _) ty_sig =
-| TyNil : (atts:Attributes.vernac_flags -> st:Vernacstate.t -> Vernacstate.t, vernac_classification) ty_sig
+| TyNil : (vernac_command, vernac_classification) ty_sig
 | TyTerminal : string * ('r, 's) ty_sig -> ('r, 's) ty_sig
 | TyNonTerminal :
   ('a, 'b, 'c) Extend.ty_user_symbol * ('r, 's) ty_sig ->

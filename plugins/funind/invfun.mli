@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -15,5 +15,5 @@ val invfun :
 val derive_correctness :
   (Evd.evar_map ref ->
    (Constr.pconstant * Sorts.family) list ->
-   'a Entries.definition_entry list) ->
+   'a Proof_global.proof_entry list) ->
    Constr.pconstant list -> Names.inductive list -> unit

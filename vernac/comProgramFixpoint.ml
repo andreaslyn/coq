@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -13,7 +13,6 @@ open CErrors
 open Util
 open Constr
 open Context
-open Entries
 open Vars
 open Declare
 open Names
@@ -205,8 +204,8 @@ let build_wellfounded (recname,pl,bl,arityc,body) poly r measure notation =
       let name = add_suffix recname "_func" in
       (* XXX: Mutating the evar_map in the hook! *)
       (* XXX: Likely the sigma is out of date when the hook is called .... *)
-      let hook sigma _ _ l gr =
-        let sigma, h_body = Evarutil.new_global sigma gr in
+      let hook sigma { DeclareDef.Hook.S.dref; _ } =
+        let sigma, h_body = Evarutil.new_global sigma dref in
         let body = it_mkLambda_or_LetIn (mkApp (h_body, [|make|])) binders_rel in
         let ty = it_mkProd_or_LetIn top_arity binders_rel in
         let ty = EConstr.Unsafe.to_constr ty in
@@ -223,20 +222,20 @@ let build_wellfounded (recname,pl,bl,arityc,body) poly r measure notation =
       hook, name, typ
     else
       let typ = it_mkProd_or_LetIn top_arity binders_rel in
-      let hook sigma _ _ l gr =
+      let hook sigma { DeclareDef.Hook.S.dref; _ } =
         if Impargs.is_implicit_args () || not (List.is_empty impls) then
-          Impargs.declare_manual_implicits false gr impls
+          Impargs.declare_manual_implicits false dref impls
       in hook, recname, typ
   in
   (* XXX: Capturing sigma here... bad bad *)
-  let hook = Lemmas.mk_hook (hook sigma) in
+  let hook = DeclareDef.Hook.make (hook sigma) in
   Obligations.check_evars env sigma;
   let evars, _, evars_def, evars_typ =
     Obligations.eterm_obligations env recname sigma 0 def typ
   in
   let ctx = Evd.evar_universe_context sigma in
-    ignore(Obligations.add_definition recname ~term:evars_def ~univdecl:decl
-             evars_typ ctx evars ~hook)
+    ignore(Obligations.add_definition ~name:recname ~term:evars_def ~univdecl:decl
+             ~poly evars_typ ctx evars ~hook)
 
 let out_def = function
   | Some def -> def
@@ -247,8 +246,8 @@ let collect_evars_of_term evd c ty =
   Evar.Set.fold (fun ev acc -> Evd.add acc ev (Evd.find_undefined evd ev))
   evars (Evd.from_ctx (Evd.evar_universe_context evd))
 
-let do_program_recursive local poly fixkind fixl ntns =
-  let cofix = fixkind = Obligations.IsCoFixpoint in
+let do_program_recursive ~scope ~poly fixkind fixl ntns =
+  let cofix = fixkind = DeclareObl.IsCoFixpoint in
   let (env, rec_sign, pl, evd), fix, info =
     interp_recursive ~cofix ~program_mode:true fixl ntns
   in
@@ -289,12 +288,12 @@ let do_program_recursive local poly fixkind fixl ntns =
   end in
   let ctx = Evd.evar_universe_context evd in
   let kind = match fixkind with
-  | Obligations.IsFixpoint _ -> (local, poly, Fixpoint)
-  | Obligations.IsCoFixpoint -> (local, poly, CoFixpoint)
+  | DeclareObl.IsFixpoint _ -> Fixpoint
+  | DeclareObl.IsCoFixpoint -> CoFixpoint
   in
-  Obligations.add_mutual_definitions defs ~kind ~univdecl:pl ctx ntns fixkind
+  Obligations.add_mutual_definitions defs ~poly ~scope ~kind ~univdecl:pl ctx ntns fixkind
 
-let do_program_fixpoint local poly l =
+let do_program_fixpoint ~scope ~poly l =
   let g = List.map (fun ((_,wf,_,_,_),_) -> wf) l in
     match g, l with
     | [Some { CAst.v = CWfRec (n,r) }], [((({CAst.v=id},pl),_,bl,typ,def),ntn)] ->
@@ -316,8 +315,8 @@ let do_program_fixpoint local poly l =
 
     | _, _ when List.for_all (fun ro -> match ro with None | Some { CAst.v = CStructRec _} -> true | _ -> false) g ->
         let fixl,ntns = extract_fixpoint_components ~structonly:true l in
-        let fixkind = Obligations.IsFixpoint (List.map (fun d -> d.fix_annot) fixl) in
-          do_program_recursive local poly fixkind fixl ntns
+        let fixkind = DeclareObl.IsFixpoint (List.map (fun d -> d.fix_annot) fixl) in
+          do_program_recursive ~scope ~poly fixkind fixl ntns
 
     | _, _ ->
         user_err ~hdr:"do_program_fixpoint"
@@ -335,11 +334,11 @@ let check_safe () =
   let flags = Environ.typing_flags (Global.env ()) in
   flags.check_universes && flags.check_guarded
 
-let do_fixpoint local poly l =
-  do_program_fixpoint local poly l;
+let do_fixpoint ~scope ~poly l =
+  do_program_fixpoint ~scope ~poly l;
   if not (check_safe ()) then Feedback.feedback Feedback.AddedAxiom else ()
 
-let do_cofixpoint local poly l =
+let do_cofixpoint ~scope ~poly l =
   let fixl,ntns = extract_cofixpoint_components l in
-  do_program_recursive local poly Obligations.IsCoFixpoint fixl ntns;
+  do_program_recursive ~scope ~poly DeclareObl.IsCoFixpoint fixl ntns;
   if not (check_safe ()) then Feedback.feedback Feedback.AddedAxiom else ()

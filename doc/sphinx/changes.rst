@@ -120,7 +120,9 @@ reference manual. Here are the most important user-visible changes:
 
 - CoqIDE:
 
-  - CoqIDE now depends on gtk+3 and lablgtk3 instead of gtk+2 and lablgtk2
+  - CoqIDE now depends on gtk+3 and lablgtk3 instead of gtk+2 and lablgtk2.
+    The INSTALL file available in the Coq sources has been updated to list
+    the new dependencies
     (`#9279 <https://github.com/coq/coq/pull/9279>`_,
     by Hugo Herbelin, with help from Jacques Garrigue,
     Emilio Jesús Gallego Arias, Michael Sogetrop and Vincent Laporte).
@@ -525,7 +527,13 @@ Other changes in 8.10+beta1
     (`#9829 <https://github.com/coq/coq/pull/9829>`_, by Vincent Laporte).
 
   - :cmd:`Coercion` does not warn ambiguous paths which are obviously
-    convertible with existing ones
+    convertible with existing ones. The ambiguous paths messages have been
+    turned to warnings, thus now they could appear in the output of ``coqc``.
+    The convertibility checking procedure for coercion paths is complete for
+    paths consisting of coercions satisfying the uniform inheritance condition,
+    but some coercion paths could be reported as ambiguous even if they are
+    convertible with existing ones when they have coercions that don't satisfy
+    the uniform inheritance condition
     (`#9743 <https://github.com/coq/coq/pull/9743>`_,
     closes `#3219 <https://github.com/coq/coq/issues/3219>`_,
     by Kazuhiko Sakaguchi).
@@ -595,6 +603,52 @@ Other changes in 8.10+beta1
   by Théo Zimmermann,
   with help and ideas from Emilio Jesús Gallego Arias, Gaëtan
   Gilbert, Clément Pit-Claudel, Matthieu Sozeau, and Enrico Tassi).
+
+Changes in 8.10+beta2
+~~~~~~~~~~~~~~~~~~~~~
+
+Many bug fixes and documentation improvements, in particular:
+
+**Tactics**
+
+- Make the :tacn:`discriminate` tactic work together with
+  :flag:`Universe Polymorphism` and equality in :g:`Type`. This,
+  in particular, makes :tacn:`discriminate` compatible with the HoTT
+  library https://github.com/HoTT/HoTT
+  (`#10205 <https://github.com/coq/coq/pull/10205>`_,
+  by Andreas Lynge, review by Pierre-Marie Pédrot and Matthieu Sozeau).
+
+**SSReflect**
+
+- Make the ``case E: t`` tactic work together with
+  :flag:`Universe Polymorphism` and equality in :g:`Type`.
+  This makes :tacn:`case <case (ssreflect)>` compatible with the HoTT
+  library https://github.com/HoTT/HoTT
+  (`#10302 <https://github.com/coq/coq/pull/10302>`_,
+  fixes `#10301 <https://github.com/coq/coq/issues/10301>`_,
+  by Andreas Lynge, review by Enrico Tassi)
+- Make the ``rewrite /t`` tactic work together with
+  :flag:`Universe Polymorphism`.
+  This makes :tacn:`rewrite <rewrite (ssreflect)>` compatible with the HoTT
+  library https://github.com/HoTT/HoTT
+  (`#10305 <https://github.com/coq/coq/pull/10305>`_,
+  fixes `#9336 <https://github.com/coq/coq/issues/9336>`_,
+  by Andreas Lynge, review by Enrico Tassi)
+
+**CoqIDE**
+
+- Fix CoqIDE instability on Windows after the update to gtk3
+  (`#10360 <https://github.com/coq/coq/pull/10360>`_, by Michael Soegtrop,
+  closes `#9885 <https://github.com/coq/coq/issues/9885>`_).
+
+**Miscellaneous**
+
+- Proof General can now display Coq-generated diffs between proof steps
+  in color
+  (`#10019 <https://github.com/coq/coq/pull/10019>`_ and
+  (in Proof General) `#421 <https://github.com/ProofGeneral/PG/pull/421>`_,
+  by Jim Fehrle).
+
 
 Version 8.9
 -----------
@@ -956,6 +1010,19 @@ Notations
   and `vector_scope` both open with `vector_scope` on top, and expect `++` to
   refer to `app`.
   Solution: wrap `_ ++ _` in `(_ ++ _)%list` (or whichever scope you want).
+
+Changes in 8.8.0
+~~~~~~~~~~~~~~~~
+
+Various bug fixes.
+
+Changes in 8.8.1
+~~~~~~~~~~~~~~~~
+
+- Some quality-of-life fixes.
+- Numerous improvements to the documentation.
+- Fix a critical bug related to primitive projections and :tacn:`native_compute`.
+- Ship several additional Coq libraries with the Windows installer.
 
 Version 8.8
 -----------

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -16,7 +16,11 @@ type vernac_keep_as = VtKeepAxiom | VtKeepDefined | VtKeepOpaque
 
 type vernac_qed_type = VtKeep of vernac_keep_as | VtDrop
 
-type vernac_type =
+type vernac_when =
+  | VtNow
+  | VtLater
+
+type vernac_classification =
   (* Start of a proof *)
   | VtStartProof of vernac_start
   (* Command altering the global state, bad for parallel
@@ -37,7 +41,7 @@ type vernac_type =
   (* To be removed *)
   | VtMeta
 and vernac_start = opacity_guarantee * Names.Id.t list
-and vernac_sideff_type = Names.Id.t list
+and vernac_sideff_type = Names.Id.t list * vernac_when
 and opacity_guarantee =
   | GuaranteesOpacity (** Only generates opaque terms at [Qed] *)
   | Doesn'tGuaranteeOpacity (** May generate transparent terms even with [Qed].*)
@@ -48,19 +52,24 @@ and anon_abstracting_tac = bool (** abstracting anonymously its result *)
 
 and proof_block_name = string (** open type of delimiters *)
 
-type vernac_when =
-  | VtNow
-  | VtLater
-type vernac_classification = vernac_type * vernac_when
+type typed_vernac =
+  | VtDefault of (unit -> unit)
 
-type 'a vernac_command = 'a -> atts:Attributes.vernac_flags -> st:Vernacstate.t -> Vernacstate.t
+  | VtNoProof of (unit -> unit)
+  | VtCloseProof of (lemma:Lemmas.t -> unit)
+  | VtOpenProof of (unit -> Lemmas.t)
+  | VtModifyProof of (pstate:Proof_global.t -> Proof_global.t)
+  | VtReadProofOpt of (pstate:Proof_global.t option -> unit)
+  | VtReadProof of (pstate:Proof_global.t -> unit)
+
+type vernac_command = atts:Attributes.vernac_flags -> typed_vernac
 
 type plugin_args = Genarg.raw_generic_argument list
 
 (* Table of vernac entries *)
 let vernac_tab =
   (Hashtbl.create 211 :
-    (Vernacexpr.extend_name, bool * plugin_args vernac_command) Hashtbl.t)
+    (Vernacexpr.extend_name, bool * (plugin_args -> vernac_command)) Hashtbl.t)
 
 let vinterp_add depr s f =
   try
@@ -83,7 +92,7 @@ let warn_deprecated_command =
 
 (* Interpretation of a vernac command *)
 
-let call opn converted_args ~atts ~st =
+let type_vernac opn converted_args ~atts =
   let phase = ref "Looking up command" in
   try
     let depr, callback = vinterp_map opn in
@@ -99,7 +108,7 @@ let call opn converted_args ~atts ~st =
     phase := "Checking arguments";
     let hunk = callback converted_args in
     phase := "Executing command";
-    hunk ~atts ~st
+    hunk ~atts
   with
     | reraise ->
         let reraise = CErrors.push reraise in
@@ -120,12 +129,12 @@ let get_vernac_classifier (name, i) args =
 let declare_vernac_classifier name f =
   classifiers := String.Map.add name f !classifiers
 
-let classify_as_query = VtQuery, VtLater
-let classify_as_sideeff = VtSideff [], VtLater
-let classify_as_proofstep = VtProofStep { parallel = `No; proof_block_detection = None}, VtLater
+let classify_as_query = VtQuery
+let classify_as_sideeff = VtSideff ([], VtLater)
+let classify_as_proofstep = VtProofStep { parallel = `No; proof_block_detection = None}
 
 type (_, _) ty_sig =
-| TyNil : (atts:Attributes.vernac_flags -> st:Vernacstate.t -> Vernacstate.t, vernac_classification) ty_sig
+| TyNil : (vernac_command, vernac_classification) ty_sig
 | TyTerminal : string * ('r, 's) ty_sig -> ('r, 's) ty_sig
 | TyNonTerminal : ('a, 'b, 'c) Extend.ty_user_symbol * ('r, 's) ty_sig -> ('a -> 'r, 'a -> 's) ty_sig
 
@@ -151,7 +160,7 @@ let rec untype_classifier : type r s. (r, s) ty_sig -> s -> classifier = functio
   end
 
 (** Stupid GADTs forces us to duplicate the definition just for typing *)
-let rec untype_command : type r s. (r, s) ty_sig -> r -> plugin_args vernac_command = function
+let rec untype_command : type r s. (r, s) ty_sig -> r -> plugin_args -> vernac_command = function
 | TyNil -> fun f args ->
   begin match args with
   | [] -> f

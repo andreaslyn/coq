@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -304,6 +304,12 @@ let print_inductive_argument_scopes =
   print_args_data_of_inductive_ids
     Notation.find_arguments_scope (Option.has_some) print_argument_scopes
 
+let print_bidi_hints gr =
+  match Pretyping.get_bidirectionality_hint gr with
+  | None -> []
+  | Some nargs ->
+    [str "Using typing information from context after typing the " ++ int nargs ++ str " first arguments"]
+
 (*********************)
 (* "Locate" commands *)
 
@@ -577,11 +583,15 @@ let print_constant with_values sep sp udecl =
 	str"*** [ " ++
 	print_basename sp ++ print_instance sigma cb ++ str " : " ++ cut () ++ pr_ltype typ ++
 	str" ]" ++
-        Printer.pr_universes sigma univs ?priv:cb.const_private_poly_univs
-    | Some (c, ctx) ->
+        Printer.pr_universes sigma univs
+    | Some (c, priv, ctx) ->
+      let priv = match priv with
+      | Opaqueproof.PrivateMonomorphic () -> None
+      | Opaqueproof.PrivatePolymorphic (_, ctx) -> Some ctx
+      in
 	print_basename sp ++ print_instance sigma cb ++ str sep ++ cut () ++
 	(if with_values then print_typed_body env sigma (Some c,typ) else pr_ltype typ)++
-        Printer.pr_universes sigma univs ?priv:cb.const_private_poly_univs)
+        Printer.pr_universes sigma univs ?priv)
 
 let gallina_print_constant_with_infos sp udecl =
   print_constant true " = " sp udecl ++
@@ -717,7 +727,7 @@ let print_full_pure_context env sigma =
 	      | OpaqueDef lc ->
 		str "Theorem " ++ print_basename con ++ cut () ++
                 str " : " ++ pr_ltype_env env sigma typ ++ str "." ++ fnl () ++
-                str "Proof " ++ pr_lconstr_env env sigma (Opaqueproof.force_proof Library.indirect_accessor (Global.opaque_tables ()) lc)
+                str "Proof " ++ pr_lconstr_env env sigma (fst (Opaqueproof.force_proof Library.indirect_accessor (Global.opaque_tables ()) lc))
 	      | Def c ->
 		str "Definition " ++ print_basename con ++ cut () ++
                 str "  : " ++ pr_ltype_env env sigma typ ++ cut () ++ str " := " ++
@@ -841,7 +851,8 @@ let print_about_any ?loc env sigma k udecl =
 	print_name_infos ref @
 	(if Pp.ismt rb then [] else [rb]) @
 	print_opacity ref @
-	[hov 0 (str "Expands to: " ++ pr_located_qualid k)])
+  print_bidi_hints ref @
+  [hov 0 (str "Expands to: " ++ pr_located_qualid k)])
   | Syntactic kn ->
     let () = match Syntax_def.search_syntactic_definition kn with
     | [],Notation_term.NRef ref -> Dumpglob.add_glob ?loc ref

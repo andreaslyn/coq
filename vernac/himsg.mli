@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -23,8 +23,6 @@ val explain_type_error : env -> Evd.evar_map -> type_error -> Pp.t
 val explain_pretype_error : env -> Evd.evar_map -> pretype_error -> Pp.t
 
 val explain_inductive_error : inductive_error -> Pp.t
-
-val explain_mismatched_contexts : env -> contexts -> Constrexpr.constr_expr list -> Constr.rel_context -> Pp.t
 
 val explain_typeclass_error : env -> Evd.evar_map -> typeclass_error -> Pp.t
 

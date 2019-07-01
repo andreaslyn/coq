@@ -1,9 +1,11 @@
 (************************************************************************)
-(*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2016     *)
+(*         *   The Coq Proof Assistant / The Coq Development Team       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
+(* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
-(*    //   *      This file is distributed under the terms of the       *)
-(*         *       GNU Lesser General Public License Version 2.1        *)
+(*    //   *    This file is distributed under the terms of the         *)
+(*         *     GNU Lesser General Public License Version 2.1          *)
+(*         *     (see LICENSE file for the text of the license)         *)
 (************************************************************************)
 
 open Names
@@ -23,12 +25,13 @@ val register_primitive : ?local:bool ->
 
 val register_struct
   :  ?local:bool
-  -> pstate:Proof_global.t option
   -> strexpr
   -> unit
 
 val register_notation : ?local:bool -> sexpr list -> int option ->
   raw_tacexpr -> unit
+
+val perform_eval : pstate:Proof_global.t option -> raw_tacexpr -> unit
 
 (** {5 Notations} *)
 

@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -1094,19 +1094,6 @@ let explain_not_a_class env sigma c =
 let explain_unbound_method env sigma cid { CAst.v = id } =
   str "Unbound method name " ++ Id.print (id) ++ spc () ++
   str"of class" ++ spc () ++ pr_global cid ++ str "."
-
-let pr_constr_exprs env sigma exprs =
-  hv 0 (List.fold_right
-         (fun d pps -> ws 2 ++ Ppconstr.pr_constr_expr env sigma d ++ pps)
-         exprs (mt ()))
-
-let explain_mismatched_contexts env c i j =
-  let sigma = Evd.from_env env in
-  let pm, pn = with_diffs (pr_rel_context env sigma j) (pr_constr_exprs env sigma i) in
-  str"Mismatched contexts while declaring instance: " ++ brk (1,1) ++
-    hov 1 (str"Expected:" ++ brk (1, 1) ++ pm) ++
-    fnl () ++ brk (1,1) ++
-    hov 1 (str"Found:" ++ brk (1, 1) ++ pn)
 
 let explain_typeclass_error env sigma = function
   | NotAClass c -> explain_not_a_class env sigma c

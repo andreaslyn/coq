@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -231,8 +231,7 @@ let check_engagement env expected_impredicative_set =
 type side_effect = {
   from_env : Declarations.structure_body CEphemeron.key;
   seff_constant : Constant.t;
-  seff_body : (Constr.t * Univ.ContextSet.t) Declarations.constant_body;
-  seff_role : Entries.side_effect_role;
+  seff_body : Constr.t Declarations.constant_body;
 }
 
 module SideEffects :
@@ -299,11 +298,6 @@ let concat_private = SideEffects.concat
 
 let universes_of_private eff =
   let fold acc eff =
-    let acc = match eff.seff_body.const_body with
-    | Def _ -> acc
-    | OpaqueDef (_, ctx) -> ctx :: acc
-    | Primitive _ | Undef _ -> assert false
-    in
     match eff.seff_body.const_universes with
     | Monomorphic ctx -> ctx :: acc
     | Polymorphic _ -> acc
@@ -314,22 +308,23 @@ let env_of_safe_env senv = senv.env
 let env_of_senv = env_of_safe_env
 
 type constraints_addition =
-  | Now of bool * Univ.ContextSet.t
+  | Now of Univ.ContextSet.t
   | Later of Univ.ContextSet.t Future.computation
+
+let push_context_set poly cst senv =
+  { senv with
+    env = Environ.push_context_set ~strict:(not poly) cst senv.env;
+    univ = Univ.ContextSet.union cst senv.univ }
 
 let add_constraints cst senv =
   match cst with
   | Later fc -> 
     {senv with future_cst = fc :: senv.future_cst}
-  | Now (poly,cst) ->
-  { senv with
-    env = Environ.push_context_set ~strict:(not poly) cst senv.env;
-    univ = Univ.ContextSet.union cst senv.univ }
+  | Now cst ->
+    push_context_set false cst senv
 
 let add_constraints_list cst senv =
   List.fold_left (fun acc c -> add_constraints c acc) senv cst
-
-let push_context_set poly ctx = add_constraints (Now (poly,ctx))
 
 let is_curmod_library senv =
   match senv.modvariant with LIBRARY -> true | _ -> false
@@ -339,7 +334,7 @@ let join_safe_environment ?(except=Future.UUIDSet.empty) e =
   List.fold_left
     (fun e fc ->
        if Future.UUIDSet.mem (Future.uuid fc) except then e
-       else add_constraints (Now (false, Future.join fc)) e)
+       else add_constraints (Now (Future.join fc)) e)
     {e with future_cst = []} e.future_cst
 
 let is_joined_environment e = List.is_empty e.future_cst 
@@ -462,22 +457,22 @@ let globalize_constant_universes cb =
   match cb.const_universes with
   | Monomorphic cstrs ->
     (* Constraints hidden in the opaque body are added by [add_constant_aux] *)
-    [Now (false, cstrs)]
+    [cstrs]
   | Polymorphic _ ->
-    [Now (true, Univ.ContextSet.empty)]
+    []
       
 let globalize_mind_universes mb =
   match mb.mind_universes with
   | Monomorphic ctx ->
-    [Now (false, ctx)]
-  | Polymorphic _ -> [Now (true, Univ.ContextSet.empty)]
+    [ctx]
+  | Polymorphic _ -> []
 
 let constraints_of_sfb sfb =
   match sfb with
   | SFBconst cb -> globalize_constant_universes cb
   | SFBmind mib -> globalize_mind_universes mib
-  | SFBmodtype mtb -> [Now (false, mtb.mod_constraints)]
-  | SFBmodule mb -> [Now (false, mb.mod_constraints)]
+  | SFBmodtype mtb -> [mtb.mod_constraints]
+  | SFBmodule mb -> [mb.mod_constraints]
 
 let add_retroknowledge pttc senv =
   { senv with
@@ -514,7 +509,7 @@ let add_field ?(is_include=false) ((l,sfb) as field) gn senv =
     else
       (* Delayed constraints from opaque body are added by [add_constant_aux] *)
       let cst = constraints_of_sfb sfb in
-      add_constraints_list cst senv
+      List.fold_left (fun senv cst -> push_context_set false cst senv) senv cst
   in
   let env' = match sfb, gn with
     | SFBconst cb, C con -> Environ.add_constant con cb senv.env
@@ -541,8 +536,7 @@ type 'a effect_entry =
 type global_declaration =
   | ConstantEntry : 'a effect_entry * 'a Entries.constant_entry -> global_declaration
 
-type exported_private_constant = 
-  Constant.t * Entries.side_effect_role
+type exported_private_constant = Constant.t
 
 let add_constant_aux ~in_section senv (kn, cb) =
   let l = Constant.label kn in
@@ -551,7 +545,7 @@ let add_constant_aux ~in_section senv (kn, cb) =
     let fc = Opaqueproof.get_direct_constraints o in
     begin match Future.peek_val fc with
     | None -> [Later fc]
-    | Some c -> [Now (false, c)]
+    | Some c -> [Now c]
     end
   | Undef _ | Def _ | Primitive _ | OpaqueDef _ -> []
   in
@@ -601,7 +595,7 @@ let inline_side_effects env body side_eff =
     let fold (subst, var, ctx, args) (c, cb) =
       let (b, opaque) = match cb.const_body with
       | Def b -> (Mod_subst.force_constr b, false)
-      | OpaqueDef (b, _) -> (b, true)
+      | OpaqueDef b -> (b, true)
       | _ -> assert false
       in
       match cb.const_universes with
@@ -689,22 +683,30 @@ let constant_entry_of_side_effect eff =
     | Polymorphic auctx ->
       Polymorphic_entry (Univ.AUContext.names auctx, Univ.AUContext.repr auctx)
   in
-  let pt =
+  let p =
     match cb.const_body with
-    | OpaqueDef (b, c) -> b, c
-    | Def b -> Mod_subst.force_constr b, Univ.ContextSet.empty
+    | OpaqueDef b -> b
+    | Def b -> Mod_subst.force_constr b
     | _ -> assert false in
+  if Declareops.is_opaque cb then
+  OpaqueEntry {
+    opaque_entry_body = Future.from_val ((p, Univ.ContextSet.empty), ());
+    opaque_entry_secctx = cb.const_hyps;
+    opaque_entry_feedback = None;
+    opaque_entry_type = cb.const_type;
+    opaque_entry_universes = univs;
+  }
+  else
   DefinitionEntry {
-    const_entry_body = Future.from_val (pt, ());
-    const_entry_secctx = None;
+    const_entry_body = p;
+    const_entry_secctx = Some cb.const_hyps;
     const_entry_feedback = None;
     const_entry_type = Some cb.const_type;
     const_entry_universes = univs;
-    const_entry_opaque = Declareops.is_opaque cb;
     const_entry_inline_code = cb.const_inline_code }
 
 let export_eff eff =
-  (eff.seff_constant, eff.seff_body, eff.seff_role)
+  (eff.seff_constant, eff.seff_body)
 
 let export_side_effects mb env (b_ctx, eff) =
       let not_exists e =
@@ -721,11 +723,6 @@ let export_side_effects mb env (b_ctx, eff) =
         match cb.const_universes with
         | Polymorphic _ -> env
         | Monomorphic ctx ->
-          let ctx = match eff.seff_body.const_body with
-          | Def _ -> ctx
-          | OpaqueDef (_, ctx') -> Univ.ContextSet.union ctx' ctx
-          | Undef _ | Primitive _ -> assert false
-          in
           Environ.push_context_set ~strict:true ctx env
       in
       let rec translate_seff sl seff acc env =
@@ -737,7 +734,16 @@ let export_side_effects mb env (b_ctx, eff) =
               let kn = eff.seff_constant in
                let ce = constant_entry_of_side_effect eff in
                let cb = Term_typing.translate_constant Term_typing.Pure env kn ce in
-               let cb = map_constant Future.force cb in
+              let map cu =
+                let (c, u) = Future.force cu in
+                let () = match u with
+                | Opaqueproof.PrivateMonomorphic ctx
+                | Opaqueproof.PrivatePolymorphic (_, ctx) ->
+                  assert (Univ.ContextSet.is_empty ctx)
+                in
+                c
+              in
+               let cb = map_constant map cb in
                let eff = { eff with seff_body = cb } in
                (push_seff env eff, export_eff eff)
             in
@@ -751,9 +757,16 @@ let export_side_effects mb env (b_ctx, eff) =
 
 let export_private_constants ~in_section ce senv =
   let exported, ce = export_side_effects senv.revstruct senv.env ce in
-  let map (kn, cb, _) = (kn, map_constant (fun p -> Opaqueproof.create (Future.from_val p)) cb) in
+  let map univs p =
+    let local = match univs with
+    | Monomorphic _ -> Opaqueproof.PrivateMonomorphic Univ.ContextSet.empty
+    | Polymorphic auctx -> Opaqueproof.PrivatePolymorphic (Univ.AUContext.size auctx, Univ.ContextSet.empty)
+    in
+    Opaqueproof.create (Future.from_val (p, local))
+  in
+  let map (kn, cb) = (kn, map_constant (fun c -> map cb.const_universes c) cb) in
   let bodies = List.map map exported in
-  let exported = List.map (fun (kn, _, r) -> (kn, r)) exported in
+  let exported = List.map (fun (kn, _) -> kn) exported in
   let senv = List.fold_left (add_constant_aux ~in_section) senv bodies in
   (ce, exported), senv
 
@@ -763,7 +776,7 @@ let add_recipe ~in_section l r senv =
   let senv = add_constant_aux ~in_section senv (kn, cb) in
   kn, senv
 
-let add_constant ?role ~in_section l decl senv =
+let add_constant (type a) ~(side_effect : a effect_entry) ~in_section l decl senv : (Constant.t * a) * safe_environment =
   let kn = Constant.make2 senv.modpath l in
     let cb = 
       match decl with
@@ -778,7 +791,7 @@ let add_constant ?role ~in_section l decl senv =
         Term_typing.translate_constant Term_typing.Pure senv.env kn ce
     in
   let senv =
-    let cb = map_constant Opaqueproof.create cb in
+    let cb = map_constant (fun c -> Opaqueproof.create c) cb in
     add_constant_aux ~in_section senv (kn, cb) in
   let senv =
     match decl with
@@ -787,16 +800,30 @@ let add_constant ?role ~in_section l decl senv =
       add_retroknowledge (Retroknowledge.Register_type(t,kn)) senv
     | _ -> senv
   in
-  let eff = match role with
-  | None -> empty_private_constants
-  | Some role ->
-    let cb = map_constant Future.force cb in
+  let eff : a = match side_effect with
+  | PureEntry -> ()
+  | EffectEntry ->
+    let body, univs = match cb.const_body with
+    | (Primitive _ | Undef _) -> assert false
+    | Def c -> (Def c, cb.const_universes)
+    | OpaqueDef o ->
+      let (b, delayed) = Future.force o in
+      match cb.const_universes, delayed with
+      | Monomorphic ctx', Opaqueproof.PrivateMonomorphic ctx ->
+        OpaqueDef b, Monomorphic (Univ.ContextSet.union ctx ctx')
+      | Polymorphic auctx, Opaqueproof.PrivatePolymorphic (_, ctx) ->
+        (* Upper layers enforce that there are no internal constraints *)
+        let () = assert (Univ.ContextSet.is_empty ctx) in
+        OpaqueDef b, Polymorphic auctx
+      | (Monomorphic _ | Polymorphic _), (Opaqueproof.PrivateMonomorphic _ | Opaqueproof.PrivatePolymorphic _) ->
+        assert false
+    in
+    let cb = { cb with const_body = body; const_universes = univs } in
     let from_env = CEphemeron.create senv.revstruct in
     let eff = {
       from_env = from_env;
       seff_constant = kn;
       seff_body = cb;
-      seff_role = role;
     } in
     SideEffects.add eff empty_private_constants
   in
@@ -833,13 +860,13 @@ let add_modtype l params_mte inl senv =
 (** full_add_module adds module with universes and constraints *)
 
 let full_add_module mb senv =
-  let senv = add_constraints (Now (false, mb.mod_constraints)) senv in
+  let senv = add_constraints (Now mb.mod_constraints) senv in
   let dp = ModPath.dp mb.mod_mp in
   let linkinfo = Nativecode.link_info_of_dirpath dp in
   { senv with env = Modops.add_linked_module mb linkinfo senv.env }
 
 let full_add_module_type mp mt senv =
-  let senv = add_constraints (Now (false, mt.mod_constraints)) senv in
+  let senv = add_constraints (Now mt.mod_constraints) senv in
   { senv with env = Modops.add_module_type mp mt senv.env }
 
 (** Insertion of modules *)
@@ -1019,7 +1046,7 @@ let add_include me is_module inl senv =
   let sign,(),resolver,cst =
     translate_mse_incl is_module senv.env mp_sup inl me
   in
-  let senv = add_constraints (Now (false, cst)) senv in
+  let senv = add_constraints (Now cst) senv in
   (* Include Self support  *)
   let rec compute_sign sign mb resolver senv =
     match sign with
@@ -1027,7 +1054,7 @@ let add_include me is_module inl senv =
       let cst_sub = Subtyping.check_subtypes senv.env mb mtb in
       let senv =
 	add_constraints
-	  (Now (false, Univ.ContextSet.add_constraints cst_sub Univ.ContextSet.empty))
+          (Now (Univ.ContextSet.add_constraints cst_sub Univ.ContextSet.empty))
 	  senv in
       let mpsup_delta =
 	Modops.inline_delta_resolver senv.env inl mp_sup mbid mtb mb.mod_delta
@@ -1257,7 +1284,7 @@ let register_inductive ind prim senv =
 
 let add_constraints c =
   add_constraints
-    (Now (false, Univ.ContextSet.add_constraints c Univ.ContextSet.empty))
+    (Now (Univ.ContextSet.add_constraints c Univ.ContextSet.empty))
 
 
 (* NB: The next old comment probably refers to [propagate_loads] above.

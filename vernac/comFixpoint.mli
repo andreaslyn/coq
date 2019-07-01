@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -10,7 +10,6 @@
 
 open Names
 open Constr
-open Decl_kinds
 open Constrexpr
 open Vernacexpr
 
@@ -18,15 +17,17 @@ open Vernacexpr
 
 (** Entry points for the vernacular commands Fixpoint and CoFixpoint *)
 
+val do_fixpoint_interactive :
+  scope:DeclareDef.locality -> poly:bool -> (fixpoint_expr * decl_notation list) list -> Lemmas.t
+
 val do_fixpoint :
-  ontop:Proof_global.t option ->
-  (* When [false], assume guarded. *)
-  locality -> polymorphic -> (fixpoint_expr * decl_notation list) list -> Proof_global.t option
+  scope:DeclareDef.locality -> poly:bool -> (fixpoint_expr * decl_notation list) list -> unit
+
+val do_cofixpoint_interactive :
+  scope:DeclareDef.locality -> poly:bool -> (cofixpoint_expr * decl_notation list) list -> Lemmas.t
 
 val do_cofixpoint :
-  ontop:Proof_global.t option ->
-  (* When [false], assume guarded. *)
-  locality -> polymorphic -> (cofixpoint_expr * decl_notation list) list -> Proof_global.t option
+  scope:DeclareDef.locality -> poly:bool -> (cofixpoint_expr * decl_notation list) list -> unit
 
 (************************************************************************)
 (** Internal API  *)
@@ -55,7 +56,7 @@ val interp_recursive :
   (* names / defs / types *)
   (Id.t list * Sorts.relevance list * EConstr.constr option list * EConstr.types list) *
   (* ctx per mutual def / implicits / struct annotations *)
-  (EConstr.rel_context * Impargs.manual_explicitation list * int option) list
+  (EConstr.rel_context * Impargs.manual_implicits * int option) list
 
 (** Exported for Funind *)
 
@@ -78,25 +79,6 @@ val interp_fixpoint :
   structured_fixpoint_expr list -> decl_notation list ->
   recursive_preentry * UState.universe_decl * UState.t *
   (EConstr.rel_context * Impargs.manual_implicits * int option) list
-
-(** Registering fixpoints and cofixpoints in the environment *)
-
-(** [Not used so far] *)
-val declare_fixpoint :
-  ontop:Proof_global.t option ->
-  locality -> polymorphic ->
-  recursive_preentry * UState.universe_decl * UState.t *
-  (Constr.rel_context * Impargs.manual_implicits * int option) list ->
-  Proof_global.lemma_possible_guards -> decl_notation list ->
-  Proof_global.t option
-
-val declare_cofixpoint :
-  ontop:Proof_global.t option ->
-  locality -> polymorphic ->
-  recursive_preentry * UState.universe_decl * UState.t *
-  (Constr.rel_context * Impargs.manual_implicits * int option) list ->
-  decl_notation list ->
-  Proof_global.t option
 
 (** Very private function, do not use *)
 val compute_possible_guardness_evidences :

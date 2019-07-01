@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -441,7 +441,7 @@ let coercion_of_reference r =
 module CoercionPrinting =
   struct
     type t = coe_typ
-    let compare = GlobRef.Ordered.compare
+    module Set = GlobRef.Set
     let encode _env = coercion_of_reference
     let subst = subst_coe_typ
     let printer x = Nametab.pr_global_env Id.Set.empty x

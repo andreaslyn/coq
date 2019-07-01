@@ -10,7 +10,7 @@ stages:
 variables:
   # Format: $IMAGE-V$DATE [Cache is not used as of today but kept here
   # for reference]
-  CACHEKEY: "bionic_coq-V2019-04-20-V1"
+  CACHEKEY: "bionic_coq-V2019-06-21-V1"
   IMAGE: "$CI_REGISTRY_IMAGE:$CACHEKEY"
   # By default, jobs run in the base switch; override to select another switch
   OPAM_SWITCH: "base"
@@ -295,16 +295,12 @@ windows32:
     - /^pr-.*$/
 
 lint:
-  image: docker:git
   stage: test
-  script:
-    - apk add bash
-    - dev/lint-repository.sh
+  script: dev/lint-repository.sh
   dependencies: []
-  before_script: []
   variables:
-    # we need an unknown amount of history for per-commit linting
-    GIT_DEPTH: ""
+    GIT_DEPTH: "" # we need an unknown amount of history for per-commit linting
+    OPAM_SWITCH: base
 
 pkg:opam:
   stage: test

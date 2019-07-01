@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -17,7 +17,6 @@ open Constr
 open Context
 open Vars
 open Termops
-open Entries
 open Environ
 open Classops
 open Declare
@@ -339,42 +338,44 @@ let try_add_new_coercion_core ref ~local c d e f =
       user_err ~hdr:"try_add_new_coercion_core"
         (explain_coercion_error ref e ++ str ".")
 
-let try_add_new_coercion ref ~local poly =
+let try_add_new_coercion ref ~local ~poly =
   try_add_new_coercion_core ref ~local poly None None false
 
-let try_add_new_coercion_subclass cl ~local poly =
+let try_add_new_coercion_subclass cl ~local ~poly =
   let coe_ref = build_id_coercion None cl poly in
   try_add_new_coercion_core coe_ref ~local poly (Some cl) None true
 
-let try_add_new_coercion_with_target ref ~local poly ~source ~target =
+let try_add_new_coercion_with_target ref ~local ~poly ~source ~target =
   try_add_new_coercion_core ref ~local poly (Some source) (Some target) false
 
-let try_add_new_identity_coercion id ~local poly ~source ~target =
+let try_add_new_identity_coercion id ~local ~poly ~source ~target =
   let ref = build_id_coercion (Some id) source poly in
   try_add_new_coercion_core ref ~local poly (Some source) (Some target) true
 
-let try_add_new_coercion_with_source ref ~local poly ~source =
+let try_add_new_coercion_with_source ref ~local ~poly ~source =
   try_add_new_coercion_core ref ~local poly (Some source) None false
 
-let add_coercion_hook poly _uctx _trans local ref =
-  let local = match local with
-  | Discharge
-  | Local -> true
-  | Global -> false
+let add_coercion_hook poly { DeclareDef.Hook.S.scope; dref; _ } =
+  let open DeclareDef in
+  let local = match scope with
+  | Discharge -> assert false (* Local Coercion in section behaves like Local Definition *)
+  | Global ImportNeedQualified -> true
+  | Global ImportDefaultBehavior -> false
   in
-  let () = try_add_new_coercion ref ~local poly in
-  let msg = Nametab.pr_global_env Id.Set.empty ref ++ str " is now a coercion" in
+  let () = try_add_new_coercion dref ~local ~poly in
+  let msg = Nametab.pr_global_env Id.Set.empty dref ++ str " is now a coercion" in
   Flags.if_verbose Feedback.msg_info msg
 
-let add_coercion_hook poly = Lemmas.mk_hook (add_coercion_hook poly)
+let add_coercion_hook ~poly = DeclareDef.Hook.make (add_coercion_hook poly)
 
-let add_subclass_hook poly _uctx _trans local ref =
-  let stre = match local with
-  | Local -> true
-  | Global -> false
-  | Discharge -> assert false
+let add_subclass_hook ~poly { DeclareDef.Hook.S.scope; dref; _ } =
+  let open DeclareDef in
+  let stre = match scope with
+  | Discharge -> assert false (* Local Subclass in section behaves like Local Definition *)
+  | Global ImportNeedQualified -> true
+  | Global ImportDefaultBehavior -> false
   in
-  let cl = class_of_global ref in
-  try_add_new_coercion_subclass cl ~local:stre poly
+  let cl = class_of_global dref in
+  try_add_new_coercion_subclass cl ~local:stre ~poly
 
-let add_subclass_hook poly = Lemmas.mk_hook (add_subclass_hook poly)
+let add_subclass_hook ~poly = DeclareDef.Hook.make (add_subclass_hook ~poly)

@@ -1299,10 +1299,10 @@ let rec rebuild_return_type rt =
     | Constrexpr.CProdN(n,t') ->
         CAst.make ?loc @@ Constrexpr.CProdN(n,rebuild_return_type t')
     | Constrexpr.CLetIn(na,v,t,t') ->
-	CAst.make ?loc @@ Constrexpr.CLetIn(na,v,t,rebuild_return_type t')
+        CAst.make ?loc @@ Constrexpr.CLetIn(na,v,t,rebuild_return_type t')
     | _ -> CAst.make ?loc @@ Constrexpr.CProdN([Constrexpr.CLocalAssum ([CAst.make Anonymous],
                                        Constrexpr.Default Decl_kinds.Explicit, rt)],
-			    CAst.make @@ Constrexpr.CSort(GType []))
+                             CAst.make @@ Constrexpr.CSort(UAnonymous {rigid=true}))
 
 let do_build_inductive
       evd (funconstants: pconstant list) (funsargs: (Name.t * glob_constr * glob_constr option) list list)
@@ -1506,7 +1506,7 @@ let do_build_inductive
   let _time2 = System.get_time () in
   try
     with_full_print
-      (Flags.silently (ComInductive.do_mutual_inductive ~template:(Some false) None rel_inds false false false ~uniform:ComInductive.NonUniformParameters))
+      (Flags.silently (ComInductive.do_mutual_inductive ~template:(Some false) None rel_inds false ~poly:false false ~uniform:ComInductive.NonUniformParameters))
       Declarations.Finite
   with
     | UserError(s,msg) as e ->

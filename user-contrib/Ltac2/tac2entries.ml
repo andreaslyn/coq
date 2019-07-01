@@ -1,9 +1,11 @@
 (************************************************************************)
-(*  v      *   The Coq Proof Assistant  /  The Coq Development Team     *)
-(* <O___,, *   INRIA - CNRS - LIX - LRI - PPS - Copyright 1999-2016     *)
+(*         *   The Coq Proof Assistant / The Coq Development Team       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
+(* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
-(*    //   *      This file is distributed under the terms of the       *)
-(*         *       GNU Lesser General Public License Version 2.1        *)
+(*    //   *    This file is distributed under the terms of the         *)
+(*         *     GNU Lesser General Public License Version 2.1          *)
+(*         *     (see LICENSE file for the text of the license)         *)
 (************************************************************************)
 
 open Pp
@@ -751,7 +753,7 @@ let perform_eval ~pstate e =
       Goal_select.SelectAll, Proof.start ~name ~poly sigma []
     | Some pstate ->
       Goal_select.get_default_goal_selector (),
-      Proof_global.give_me_the_proof pstate
+      Proof_global.get_proof pstate
   in
   let v = match selector with
   | Goal_select.SelectNth i -> Proofview.tclFOCUS i i v
@@ -769,13 +771,12 @@ let perform_eval ~pstate e =
 
 (** Toplevel entries *)
 
-let register_struct ?local ~pstate str = match str with
+let register_struct ?local str = match str with
 | StrVal (mut, isrec, e) -> register_ltac ?local ~mut isrec e
 | StrTyp (isrec, t) -> register_type ?local isrec t
 | StrPrm (id, t, ml) -> register_primitive ?local id t ml
 | StrSyn (tok, lev, e) -> register_notation ?local tok lev e
 | StrMut (qid, e) -> register_redefinition ?local qid e
-| StrRun e -> perform_eval ~pstate e
 
 (** Toplevel exception *)
 
@@ -857,7 +858,7 @@ let print_ltac qid =
 (** Calling tactics *)
 
 let solve ~pstate default tac =
-  let pstate, status = Proof_global.with_current_proof begin fun etac p ->
+  let pstate, status = Proof_global.map_fold_proof_endline begin fun etac p ->
     let with_end_tac = if default then Some etac else None in
     let g = Goal_select.get_default_goal_selector () in
     let (p, status) = Pfedit.solve g None tac ?with_end_tac p in

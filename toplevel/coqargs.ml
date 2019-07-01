@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -10,7 +10,7 @@
 
 let fatal_error exn =
   Topfmt.(in_phase ~phase:ParsingCommandLine print_err_exn exn);
-  let exit_code = if CErrors.(is_anomaly exn || not (handled exn)) then 129 else 1 in
+  let exit_code = if (CErrors.is_anomaly exn) then 129 else 1 in
   exit exit_code
 
 let error_wrong_arg msg =
@@ -183,6 +183,10 @@ let set_color opts = function
 let warn_deprecated_inputstate =
   CWarnings.create ~name:"deprecated-inputstate" ~category:"deprecated"
          (fun () -> Pp.strbrk "The inputstate option is deprecated and discouraged.")
+
+let warn_deprecated_simple_require =
+  CWarnings.create ~name:"deprecated-boot" ~category:"deprecated"
+         (fun () -> Pp.strbrk "The -require option is deprecated, please use -require-import instead.")
 
 let set_inputstate opts s =
   warn_deprecated_inputstate ();
@@ -416,7 +420,22 @@ let parse_args ~help ~init arglist : t * string list =
       Flags.profile_ltac_cutoff := get_float opt (next ());
       oval
 
-    |"-require" -> add_vo_require oval (next ()) None (Some false)
+    |"-rfrom" ->
+      let from = next () in add_vo_require oval (next ()) (Some from) None
+
+    |"-require" ->
+      warn_deprecated_simple_require ();
+      add_vo_require oval (next ()) None (Some false)
+
+    |"-require-import" | "-ri" -> add_vo_require oval (next ()) None (Some false)
+
+    |"-require-export" | "-re" -> add_vo_require oval (next ()) None (Some true)
+
+    |"-require-import-from" | "-rifrom" ->
+      let from = next () in add_vo_require oval (next ()) (Some from) (Some false)
+
+    |"-require-export-from" | "-refrom" ->
+      let from = next () in add_vo_require oval (next ()) (Some from) (Some true)
 
     |"-top" ->
       let topname = Libnames.dirpath_of_string (next ()) in

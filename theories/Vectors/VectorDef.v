@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -217,8 +217,7 @@ End BASES.
 Local Notation "v [@ p ]" := (nth v p) (at level 1).
 
 Section ITERATORS.
-(** * Here are special non dependent useful instantiation of induction
-schemes *)
+(** * Here are special non dependent useful instantiation of induction schemes *)
 
 (** Uniform application on the arguments of the vector *)
 Definition map {A} {B} (f : A -> B) : forall {n} (v:t A n), t B n :=

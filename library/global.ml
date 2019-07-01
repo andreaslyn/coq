@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -94,7 +94,7 @@ let make_sprop_cumulative () = globalize0 Safe_typing.make_sprop_cumulative
 let set_allow_sprop b = globalize0 (Safe_typing.set_allow_sprop b)
 let sprop_allowed () = Environ.sprop_allowed (env())
 let export_private_constants ~in_section cd = globalize (Safe_typing.export_private_constants ~in_section cd)
-let add_constant ?role ~in_section id d = globalize (Safe_typing.add_constant ?role ~in_section (i2l id) d)
+let add_constant ~side_effect ~in_section id d = globalize (Safe_typing.add_constant ~side_effect ~in_section (i2l id) d)
 let add_recipe ~in_section id d = globalize (Safe_typing.add_recipe ~in_section (i2l id) d)
 let add_mind id mie = globalize (Safe_typing.add_mind (i2l id) mie)
 let add_modtype id me inl = globalize (Safe_typing.add_modtype (i2l id) me inl)
@@ -139,9 +139,14 @@ let body_of_constant_body access env cb =
   | Undef _ | Primitive _ ->
      None
   | Def c ->
-     Some (Mod_subst.force_constr c, Declareops.constant_polymorphic_context cb)
+    let u = match cb.const_universes with
+    | Monomorphic _ -> Opaqueproof.PrivateMonomorphic ()
+    | Polymorphic auctx -> Opaqueproof.PrivatePolymorphic (Univ.AUContext.size auctx, Univ.ContextSet.empty)
+    in
+    Some (Mod_subst.force_constr c, u, Declareops.constant_polymorphic_context cb)
   | OpaqueDef o ->
-     Some (Opaqueproof.force_proof access otab o, Declareops.constant_polymorphic_context cb)
+    let c, u = Opaqueproof.force_proof access otab o in
+    Some (c, u, Declareops.constant_polymorphic_context cb)
 
 let body_of_constant_body access ce = body_of_constant_body access (env ()) ce
 

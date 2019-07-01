@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -401,7 +401,7 @@ let find_elim hdcncl lft2rgt dep cls ot =
 	     Logic.eq or Jmeq just before *)
 	assert false
     in
-      pf_constr_of_global (ConstRef c)
+        pf_constr_of_global (ConstRef c)
   else
   let scheme_name = match dep, lft2rgt, inccl with
     (* Non dependent case *)
@@ -1004,25 +1004,22 @@ let gen_absurdity id =
           absurd_term=False
 *)
 
-let ind_scheme_of_eq lbeq =
+let ind_scheme_of_eq lbeq to_kind =
   let (mib,mip) = Global.lookup_inductive (destIndRef lbeq.eq) in
-  let kind = inductive_sort_family mip in
+  let from_kind = inductive_sort_family mip in
   (* use ind rather than case by compatibility *)
-  let kind =
-    if kind == InProp then Elimschemes.ind_or_rect_scheme_kind_from_prop ()
-    else Elimschemes.ind_or_rect_scheme_kind_from_type () in
+  let kind = Elimschemes.nondep_elim_scheme from_kind to_kind in
   let c, eff = find_scheme kind (destIndRef lbeq.eq) in
     ConstRef c, eff
 
 
-let discrimination_pf e (t,t1,t2) discriminator lbeq =
+let discrimination_pf e (t,t1,t2) discriminator lbeq to_kind =
   build_coq_I () >>= fun i ->
-  build_coq_False () >>= fun absurd_term ->
-  let eq_elim, eff       = ind_scheme_of_eq lbeq in
+  let eq_elim, eff = ind_scheme_of_eq lbeq to_kind in
   Proofview.tclEFFECTS eff <*>
     pf_constr_of_global eq_elim >>= fun eq_elim ->
     Proofview.tclUNIT
-       (applist (eq_elim, [t;t1;mkNamedLambda (make_annot e Sorts.Relevant) t discriminator;i;t2]), absurd_term)
+       (applist (eq_elim, [t;t1;mkNamedLambda (make_annot e Sorts.Relevant) t discriminator;i;t2]))
 
 
 let eq_baseid = Id.of_string "e"
@@ -1040,6 +1037,7 @@ let discr_positions env sigma (lbeq,eqn,(t,t1,t2)) eq_clause cpath dirn =
   build_coq_True () >>= fun true_0 ->
   build_coq_False () >>= fun false_0 ->
   let false_ty = Retyping.get_type_of env sigma false_0 in
+  let false_kind = Retyping.get_sort_family_of env sigma false_0 in
   let e = next_ident_away eq_baseid (vars_of_env env) in
   let e_env = push_named (Context.Named.Declaration.LocalAssum (make_annot e Sorts.Relevant,t)) env in
   let discriminator =
@@ -1050,11 +1048,11 @@ let discr_positions env sigma (lbeq,eqn,(t,t1,t2)) eq_clause cpath dirn =
       UserError _ as ex -> Proofview.tclZERO ex
   in
     discriminator >>= fun discriminator ->
-    discrimination_pf e (t,t1,t2) discriminator lbeq >>= fun (pf, absurd_term) ->
-    let pf_ty = mkArrow eqn Sorts.Relevant absurd_term in
+    discrimination_pf e (t,t1,t2) discriminator lbeq false_kind >>= fun pf ->
+    let pf_ty = mkArrow eqn Sorts.Relevant false_0 in
     let absurd_clause = apply_on_clause (pf,pf_ty) eq_clause in
     let pf = Clenvtac.clenv_value_cast_meta absurd_clause in
-    tclTHENS (assert_after Anonymous absurd_term)
+    tclTHENS (assert_after Anonymous false_0)
       [onLastHypId gen_absurdity; (Proofview.V82.tactic (Refiner.refiner ~check:true EConstr.Unsafe.(to_constr pf)))]
 
 let discrEq (lbeq,_,(t,t1,t2) as u) eq_clause =

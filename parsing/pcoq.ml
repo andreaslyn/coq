@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -363,8 +363,21 @@ end
 
 module Grammar = Register(GrammarObj)
 
+let warn_deprecated_intropattern =
+  let open CWarnings in
+  create ~name:"deprecated-intropattern-entry" ~category:"deprecated"
+  (fun () -> Pp.strbrk "Entry name intropattern has been renamed in order \
+  to be consistent with the documented grammar of tactics. Use \
+  \"simple_intropattern\" instead.")
+
+let check_compatibility = function
+  | Genarg.ExtraArg s when ArgT.repr s = "intropattern" -> warn_deprecated_intropattern ()
+  | _ -> ()
+
 let register_grammar = Grammar.register0
-let genarg_grammar = Grammar.obj
+let genarg_grammar x =
+  check_compatibility x;
+  Grammar.obj x
 
 let create_generic_entry (type a) u s (etyp : a raw_abstract_argument_type) : a Entry.t =
   let e = new_entry u s in
@@ -427,6 +440,7 @@ module Constr =
     let binder_constr = gec_constr "binder_constr"
     let ident = make_gen_entry uconstr "ident"
     let global = make_gen_entry uconstr "global"
+    let universe_name = make_gen_entry uconstr "universe_name"
     let universe_level = make_gen_entry uconstr "universe_level"
     let sort = make_gen_entry uconstr "sort"
     let sort_family = make_gen_entry uconstr "sort_family"

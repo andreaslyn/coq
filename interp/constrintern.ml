@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -372,6 +372,9 @@ let check_hidden_implicit_parameters ?loc id impls =
       strbrk "a parameter of the inductive type; bound variables in " ++
       strbrk "the type of a constructor shall use a different name.")
 
+let pure_push_name_env (id,implargs) env =
+  {env with ids = Id.Set.add id env.ids; impls = Id.Map.add id implargs env.impls}
+
 let push_name_env ?(global_level=false) ntnvars implargs env =
   let open CAst in
   function
@@ -386,15 +389,23 @@ let push_name_env ?(global_level=false) ntnvars implargs env =
       set_var_scope ?loc id false (env.tmp_scope,env.scopes) ntnvars;
       if global_level then Dumpglob.dump_definition CAst.(make ?loc id) true "var"
       else Dumpglob.dump_binding ?loc id;
-      {env with ids = Id.Set.add id env.ids; impls = Id.Map.add id implargs env.impls}
+      pure_push_name_env (id,implargs) env
+
+let remember_binders_impargs env bl =
+  List.map_filter (fun (na,_,_,_) ->
+      match na with
+      | Anonymous -> None
+      | Name id -> Some (id,Id.Map.find id env.impls)) bl
+
+let restore_binders_impargs env l =
+  List.fold_right pure_push_name_env l env
 
 let intern_generalized_binder ?(global_level=false) intern_type ntnvars
     env {loc;v=na} b' t ty =
   let ids = (match na with Anonymous -> fun x -> x | Name na -> Id.Set.add na) env.ids in
   let ty, ids' =
-    if t then ty, ids else
-      Implicit_quantifiers.implicit_application ids
-	Implicit_quantifiers.combine_params_freevar ty
+    if t then ty, ids
+    else Implicit_quantifiers.implicit_application ids ty
   in
   let ty' = intern_type {env with ids = ids; unb = true} ty in
   let fvs = Implicit_quantifiers.generalizable_vars_of_glob_constr ~bound:ids ~allowed:ids' ty' in
@@ -998,18 +1009,10 @@ let intern_reference qid =
   in
   Smartlocate.global_of_extended_global r
 
-let sort_info_of_level_info (info: level_info) : (Libnames.qualid * int) option =
-  match info with
-  | UAnonymous -> None
-  | UUnknown -> None
-  | UNamed id -> Some (id, 0)
-
 let glob_sort_of_level (level: glob_level) : glob_sort =
   match level with
-  | GSProp -> GSProp
-  | GProp -> GProp
-  | GSet -> GSet
-  | GType info -> GType [sort_info_of_level_info info]
+  | UAnonymous {rigid} -> UAnonymous {rigid}
+  | UNamed id -> UNamed [id,0]
 
 (* Is it a global reference or a syntactic definition? *)
 let intern_qualid ?(no_secvar=false) qid intern env ntnvars us args =
@@ -1045,7 +1048,7 @@ let intern_qualid ?(no_secvar=false) qid intern env ntnvars us args =
           DAst.make ?loc @@ GApp (DAst.make ?loc:loc' @@ GRef (ref, us), arg)
         | _ -> err ()
         end
-      | Some [s], GSort (GType []) -> DAst.make ?loc @@ GSort (glob_sort_of_level s)
+      | Some [s], GSort (UAnonymous {rigid=true}) -> DAst.make ?loc @@ GSort (glob_sort_of_level s)
       | Some [_old_level], GSort _new_sort ->
         (* TODO: add old_level and new_sort to the error message *)
         user_err ?loc (str "Cannot change universe level of notation " ++ pr_qualid qid)
@@ -1308,7 +1311,7 @@ let find_pattern_variable qid =
   if qualid_is_ident qid then qualid_basename qid
   else raise (InternalizationError(qid.CAst.loc,NotAConstructor qid))
 
-let check_duplicate loc fields =
+let check_duplicate ?loc fields =
   let eq (ref1, _) (ref2, _) = qualid_eq ref1 ref2 in
   let dups = List.duplicates eq fields in
   match dups with
@@ -1353,7 +1356,7 @@ let sort_fields ~complete loc fields completer =
           try Nametab.shortest_qualid_of_global ?loc Id.Set.empty global_record_id
           with Not_found ->
             anomaly (str "Environment corruption for records.") in
-        let () = check_duplicate loc fields in
+        let () = check_duplicate ?loc fields in
         let (end_index,    (* one past the last field index *)
              first_field_index,  (* index of the first field of the record *)
              proj_list)    (* list of projections *)
@@ -1843,7 +1846,7 @@ let internalize globalenv env pattern_mode (_, ntnvars as lvar) c =
 	in
 	  apply_impargs c env imp subscopes l loc
 
-      | CFix ({ CAst.loc = locid; v = iddef}, dl) ->
+    | CFix ({ CAst.loc = locid; v = iddef}, dl) ->
         let lf = List.map (fun ({CAst.v = id},_,_,_,_) -> id) dl in
         let dl = Array.of_list dl in
         let n =
@@ -1865,14 +1868,18 @@ let internalize globalenv env pattern_mode (_, ntnvars as lvar) c =
                    rbefore) recarg in
                let (env',rbl) = List.fold_left intern_local_binder (env',rbefore) after in
                let bl = List.rev (List.map glob_local_binder_of_extended rbl) in
-               (n, bl, intern_type env' ty, env')) dl in
-        let idl = Array.map2 (fun (_,_,_,_,bd) (a,b,c,env') ->
-            let env'' = List.fold_left_i (fun i en name ->
-                let (_,bli,tyi,_) = idl_temp.(i) in
-                let fix_args = (List.map (fun (na, bk, _, _) -> (build_impls bk na)) bli) in
-                push_name_env ntnvars (impls_type_list ~args:fix_args tyi)
-                  en (CAst.make @@ Name name)) 0 env' lf in
-            (a,b,c,intern {env'' with tmp_scope = None} bd)) dl idl_temp in
+               let bl_impls = remember_binders_impargs env' bl in
+               (n, bl, intern_type env' ty, bl_impls)) dl in
+        (* We add the recursive functions to the environment *)
+        let env_rec = List.fold_left_i (fun i en name ->
+           let (_,bli,tyi,_) = idl_temp.(i) in
+           let fix_args = (List.map (fun (na, bk, _, _) -> build_impls bk na) bli) in
+           push_name_env ntnvars (impls_type_list ~args:fix_args tyi)
+           en (CAst.make @@ Name name)) 0 env lf in
+        let idl = Array.map2 (fun (_,_,_,_,bd) (n,bl,ty,before_impls) ->
+            (* We add the binders common to body and type to the environment *)
+            let env_body = restore_binders_impargs env_rec before_impls in
+            (n,bl,ty,intern {env_body with tmp_scope = None} bd)) dl idl_temp in
         DAst.make ?loc @@
         GRec (GFix
                 (Array.map (fun (ro,_,_,_) -> ro) idl,n),
@@ -1892,15 +1899,18 @@ let internalize globalenv env pattern_mode (_, ntnvars as lvar) c =
         let idl_tmp = Array.map
           (fun ({ CAst.loc; v = id },bl,ty,_) ->
             let (env',rbl) = List.fold_left intern_local_binder (env,[]) bl in
-            (List.rev (List.map glob_local_binder_of_extended rbl),
-             intern_type env' ty,env')) dl in
-	let idl = Array.map2 (fun (_,_,_,bd) (b,c,env') ->
-	     let env'' = List.fold_left_i (fun i en name ->
-					     let (bli,tyi,_) = idl_tmp.(i) in
-					     let cofix_args =  List.map (fun (na, bk, _, _) -> (build_impls bk na)) bli in
-	       push_name_env ntnvars (impls_type_list ~args:cofix_args tyi)
-                                            en (CAst.make @@ Name name)) 0 env' lf in
-             (b,c,intern {env'' with tmp_scope = None} bd)) dl idl_tmp in
+            let bl = List.rev (List.map glob_local_binder_of_extended rbl) in
+            let bl_impls = remember_binders_impargs env' bl in
+            (bl,intern_type env' ty,bl_impls)) dl in
+        let env_rec = List.fold_left_i (fun i en name ->
+          let (bli,tyi,_) = idl_tmp.(i) in
+          let cofix_args =  List.map (fun (na, bk, _, _) -> build_impls bk na) bli in
+          push_name_env ntnvars (impls_type_list ~args:cofix_args tyi)
+            en (CAst.make @@ Name name)) 0 env lf in
+        let idl = Array.map2 (fun (_,_,_,bd) (b,c,bl_impls) ->
+          (* We add the binders common to body and type to the environment *)
+          let env_body = restore_binders_impargs env_rec bl_impls in
+          (b,c,intern {env_body with tmp_scope = None} bd)) dl idl_tmp in
 	DAst.make ?loc @@
 	GRec (GCoFix n,
               Array.of_list lf,
@@ -2443,10 +2453,8 @@ let interp_glob_context_evars ?(program_mode=false) env sigma k bl =
               let r = Retyping.relevance_of_type env sigma t in
               let d = LocalAssum (make_annot na r,t) in
               let impls =
-		if k == Implicit then
-		  let na = match na with Name n -> Some n | Anonymous -> None in
-		    (ExplByPos (n, na), (true, true, true)) :: impls
-		else impls
+                if k == Implicit then CAst.make (Some (na,true)) :: impls
+                else CAst.make None :: impls
 	      in
                 (push_rel d env, sigma, d::params, succ n, impls)
 	  | Some b ->
@@ -2455,7 +2463,7 @@ let interp_glob_context_evars ?(program_mode=false) env sigma k bl =
               let d = LocalDef (make_annot na r, c, t) in
                 (push_rel d env, sigma, d::params, n, impls))
       (env,sigma,[],k+1,[]) (List.rev bl)
-  in sigma, ((env, par), impls)
+  in sigma, ((env, par), List.rev impls)
 
 let interp_context_evars ?program_mode ?(global_level=false) ?(impl_env=empty_internalization_env) ?(shift=0) env sigma params =
   let int_env,bl = intern_context global_level env impl_env params in

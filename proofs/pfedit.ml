@@ -1,6 +1,6 @@
 (************************************************************************)
 (*         *   The Coq Proof Assistant / The Coq Development Team       *)
-(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2018       *)
+(*  v      *   INRIA, CNRS and contributors - Copyright 1999-2019       *)
 (* <O___,, *       (see CREDITS file for the list of authors)           *)
 (*   \VV/  **************************************************************)
 (*    //   *    This file is distributed under the terms of the         *)
@@ -11,7 +11,6 @@
 open Pp
 open Util
 open Names
-open Entries
 open Environ
 open Evd
 
@@ -42,11 +41,11 @@ let get_goal_context_gen pf i =
   (sigma, Refiner.pf_env { it=goal ; sigma=sigma; })
 
 let get_goal_context pf i =
-  let p = Proof_global.give_me_the_proof pf in
+  let p = Proof_global.get_proof pf in
   get_goal_context_gen p i
 
 let get_current_goal_context pf =
-  let p = Proof_global.give_me_the_proof pf in
+  let p = Proof_global.get_proof pf in
   try get_goal_context_gen p 1
   with
   | NoSuchGoal ->
@@ -57,7 +56,7 @@ let get_current_goal_context pf =
     Evd.from_env env, env
 
 let get_current_context pf =
-  let p = Proof_global.give_me_the_proof pf in
+  let p = Proof_global.get_proof pf in
   try get_goal_context_gen p 1
   with
   | NoSuchGoal ->
@@ -108,27 +107,24 @@ let solve ?with_end_tac gi info_lvl tac pr =
     in
     (p,status)
 
-let by tac = Proof_global.with_current_proof (fun _ -> solve (Goal_select.SelectNth 1) None tac)
+let by tac = Proof_global.map_fold_proof (solve (Goal_select.SelectNth 1) None tac)
 
 (**********************************************************************)
 (* Shortcut to build a term using tactics *)
 
-open Decl_kinds
-
 let next = let n = ref 0 in fun () -> incr n; !n
 
-let build_constant_by_tactic id ctx sign ?(goal_kind = Global, false, Proof Theorem) typ tac =
+let build_constant_by_tactic ~name ctx sign ~poly typ tac =
   let evd = Evd.from_ctx ctx in
-  let terminator = Proof_global.make_terminator (fun _ -> ()) in
   let goals = [ (Global.env_of_context sign , typ) ] in
-  let pf = Proof_global.start_proof ~ontop:None evd id goal_kind goals terminator in
+  let pf = Proof_global.start_proof ~name ~poly ~udecl:UState.default_univ_decl evd goals in
   try
     let pf, status = by tac pf in
     let open Proof_global in
-    let { entries; universes } = fst @@ close_proof ~opaque:Transparent ~keep_body_ucst_separate:false (fun x -> x) pf in
+    let { entries; universes } = close_proof ~opaque:Transparent ~keep_body_ucst_separate:false (fun x -> x) pf in
     match entries with
     | [entry] ->
-      let univs = UState.demote_seff_univs entry universes in
+      let univs = UState.demote_seff_univs entry.Proof_global.proof_entry_universes universes in
       entry, status, univs
     | _ ->
       CErrors.anomaly Pp.(str "[build_constant_by_tactic] close_proof returned more than one proof term")
@@ -136,16 +132,14 @@ let build_constant_by_tactic id ctx sign ?(goal_kind = Global, false, Proof Theo
     let reraise = CErrors.push reraise in
     iraise reraise
 
-let build_by_tactic ?(side_eff=true) env sigma ?(poly=false) typ tac =
-  let id = Id.of_string ("temporary_proof"^string_of_int (next())) in
+let build_by_tactic ?(side_eff=true) env sigma ~poly typ tac =
+  let name = Id.of_string ("temporary_proof"^string_of_int (next())) in
   let sign = val_of_named_context (named_context env) in
-  let gk = Global, poly, Proof Theorem in
-  let ce, status, univs =
-    build_constant_by_tactic id sigma sign ~goal_kind:gk typ tac in
-  let body = Future.force ce.const_entry_body in
+  let ce, status, univs = build_constant_by_tactic ~name sigma sign ~poly typ tac in
+  let body, eff = Future.force ce.Proof_global.proof_entry_body in
   let (cb, ctx) =
-    if side_eff then Safe_typing.inline_private_constants env body
-    else fst body
+    if side_eff then Safe_typing.inline_private_constants env (body, eff.Evd.seff_private)
+    else body
   in
   let univs = UState.merge ~sideff:side_eff ~extend:true Evd.univ_rigid univs ctx in
   cb, status, univs
@@ -196,5 +190,6 @@ let refine_by_tactic ~name ~poly env sigma ty tac =
      other goals that were already present during its invocation, so that
      those goals rely on effects that are not present anymore. Hopefully,
      this hack will work in most cases. *)
+  let neff = neff.Evd.seff_private in
   let (ans, _) = Safe_typing.inline_private_constants env ((ans, Univ.ContextSet.empty), neff) in
   ans, sigma
