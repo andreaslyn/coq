@@ -360,12 +360,9 @@ let find_elim hdcncl lft2rgt dep cls ot =
   in
   let inccl = Option.is_empty cls in
   let env = Proofview.Goal.env gl in
-  (* if (is_global Coqlib.glob_eq hdcncl || *)
-  (*     (is_global Coqlib.glob_jmeq hdcncl && *)
-  (*        jmeq_same_dom env sigma ot)) && not dep *)
-  if (is_global_exists "core.eq.type" hdcncl ||
-      (is_global_exists "core.JMeq.type" hdcncl
-       && jmeq_same_dom env sigma ot)) && not dep
+  let is_eq = is_global_exists "core.eq.type" hdcncl in
+  let is_jmeq = is_global_exists "core.JMeq.type" hdcncl && jmeq_same_dom env sigma ot in
+  if (is_eq || is_jmeq) && not dep
   then
     let sort = elimination_sort_of_clause cls gl in
     let c =
@@ -374,24 +371,21 @@ let find_elim hdcncl lft2rgt dep cls ot =
         begin match lft2rgt, cls with
         | Some true, None
         | Some false, Some _ ->
-          (* FIXME. Missing JMeq elimination case! *)
-          begin match eq_elimination_ref true sort with
+          begin match if is_eq then eq_elimination_ref true sort else None with
           | Some r -> destConstRef r
           | None ->
             let c1 = destConstRef (lookup_eliminator env ind_sp sort) in
             let mp,l = Constant.repr2 (Constant.make1 (Constant.canonical c1)) in
             let l' = Label.of_id (add_suffix (Label.to_id l) "_r")  in
             let c1' = Global.constant_of_delta_kn (KerName.make mp l') in
-            begin try
+            try
               let _ = Global.lookup_constant c1' in c1'
             with Not_found ->
 	      user_err ~hdr:"Equality.find_elim"
                 (str "Cannot find rewrite principle " ++ Label.print l' ++ str ".")
-            end
 	  end
         | _ ->
-          (* FIXME. Missing JMeq elimination case! *)
-          begin match eq_elimination_ref false sort with
+          begin match if is_eq then eq_elimination_ref false sort else None with
           | Some r -> destConstRef r
           | None -> destConstRef (lookup_eliminator env ind_sp sort)
           end
