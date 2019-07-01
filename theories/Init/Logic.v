@@ -424,6 +424,8 @@ Section Logic_lemmas.
     forall (A:Type) (x:A) (P:A -> Type), P x -> forall y:A, y = x -> P y.
     intros A x P H y H0; elim eq_sym with (1 := H0); assumption.
   Defined.
+
+  Register eq_rect_r as core.eq.rect_r.
 End Logic_lemmas.
 
 Module EqNotations.
