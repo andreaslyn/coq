@@ -91,7 +91,7 @@ module V82 = struct
 
   let weak_progress glss gls =
     match glss.Evd.it with
-    | [ g ] -> not (Proofview.Progress.goal_equal glss.Evd.sigma g gls.Evd.sigma gls.Evd.it)
+    | [ g ] -> not (Proofview.Progress.goal_equal gls.Evd.sigma gls.Evd.it glss.Evd.sigma g)
     | _ -> true
 
   let progress glss gls =
