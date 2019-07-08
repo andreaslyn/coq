@@ -134,7 +134,9 @@ let newssrcongrtac arg ist gl =
   tclMATCH_GOAL (equality, gl') (fun gl' -> fs gl' (List.assoc 0 eq_args))
   (fun ty -> congrtac (arg, Detyping.detype Detyping.Now false Id.Set.empty (pf_env gl) (project gl) ty) ist)
   (fun () ->
-    let lhs, gl' = mk_evar gl EConstr.mkProp in let rhs, gl' = mk_evar gl' EConstr.mkProp in
+    let f, gl' = pf_fresh_global Coqlib.(lib_ref "core.False.type") gl in
+    let gl', t = pfe_type_of gl' (EConstr.of_constr f) in
+    let lhs, gl' = mk_evar gl' t in let rhs, gl' = mk_evar gl' t in
     let arrow = EConstr.mkArrow lhs Sorts.Relevant (EConstr.Vars.lift 1 rhs) in
     tclMATCH_GOAL (arrow, gl') (fun gl' -> [|fs gl' lhs;fs gl' rhs|])
     (fun lr -> tclTHEN (Proofview.V82.of_tactic (Tactics.apply (ssr_congr lr))) (congrtac (arg, mkRType) ist))
