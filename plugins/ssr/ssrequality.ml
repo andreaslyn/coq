@@ -658,7 +658,8 @@ let unfoldtac occ ko t kt gl =
 
 let unlocktac ist args gl =
   let utac (occ, gt) gl =
-    unfoldtac occ occ (interp_term ist gl gt) (fst gt) gl in
+    let sigma, i = interp_term ist gl gt in
+    unfoldtac occ occ (sigma,i) (fst gt) (re_sig (sig_it gl) sigma) in
   let locked, gl = pf_mkSsrConst "locked" gl in
   let key, gl = pf_mkSsrConst "master_key" gl in
   let ktacs = [
