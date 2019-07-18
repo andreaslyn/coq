@@ -191,7 +191,10 @@ let ssrelim ?(is_case=false) deps what ?elim eqid elim_intro_tac =
       let c = Option.get oc in let gl, c_ty = pfe_type_of gl c in
       let ((kn, i),_ as indu), unfolded_c_ty =
         pf_reduce_to_quantified_ind gl c_ty in
-      let sort = Tacticals.elimination_sort_of_goal gl in
+      let sort = match Tacticals.elimination_sort_of_goal gl with
+        | InSet -> InType
+        | s -> s
+      in
       let gl, elim =
         if not is_case then
           let t,gl= pf_fresh_global (Indrec.lookup_eliminator env (kn,i) sort) gl in
